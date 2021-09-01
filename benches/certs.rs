@@ -1,8 +1,7 @@
-use criterion::{BatchSize, black_box, Criterion, criterion_group, criterion_main};
+use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
 use uuid::Uuid;
 
 use stride::{Candidate, Examiner, Discord};
-use std::cell::RefCell;
 use stride::Outcome::Commit;
 
 fn criterion_benchmark(c: &mut Criterion) {
@@ -52,11 +51,20 @@ fn criterion_benchmark(c: &mut Criterion) {
             candidate
         }, |candidate| {
             let outcome = examiner.assess(&candidate);
+            // assert_outcome(Commit(candidate.snapshot, Discord::Assertive), outcome);
             assert_eq!(Commit(candidate.snapshot, Discord::Permissive), outcome);
         }, BatchSize::SmallInput);
     });
 
 }
+
+// fn assert_outcome(expected: Outcome, actual: Outcome) {
+//     if expected != actual {
+//         let error = format!("expected: {:?}, actual: {:?}", expected, actual);
+//         eprintln!("{}", error);
+//         panic!(error);
+//     }
+// }
 
 criterion_group!(benches, criterion_benchmark);
 criterion_main!(benches);

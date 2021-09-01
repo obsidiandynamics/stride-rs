@@ -4,6 +4,7 @@ use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use uuid::Uuid;
 use crate::AbortReason::{Staleness, Antidependency};
+use std::hash::BuildHasherDefault;
 
 #[derive(Debug)]
 pub struct Candidate {
@@ -17,8 +18,8 @@ pub struct Candidate {
 
 #[derive(Debug)]
 pub struct Examiner {
-    reads: HashMap<String, u64>,
-    writes: HashMap<String, u64>,
+    reads: HashMap<String, u64, BuildHasherDefault<hashers::fx_hash::FxHasher>>,
+    writes: HashMap<String, u64, BuildHasherDefault<hashers::fx_hash::FxHasher>>,
     base: u64,
 }
 
@@ -43,8 +44,8 @@ pub enum Discord {
 impl Examiner {
     pub fn new() -> Examiner {
         Examiner {
-            reads: HashMap::new(),
-            writes: HashMap::new(),
+            reads: HashMap::with_hasher(BuildHasherDefault::default()),
+            writes: HashMap::with_hasher(BuildHasherDefault::default()),
             base: 1,
         }
     }
@@ -59,32 +60,41 @@ impl Examiner {
         }
     }
 
+    fn update_writes_and_compute_safepoint(&mut self, candidate: &Candidate) -> u64 {
+        let mut safepoint = 0;
+        for candidate_write in candidate.writeset.iter() {
+            // update safepoint for read-write intersection
+            if let Some(&self_read) = self.reads.get(candidate_write) {
+                if self_read > safepoint {
+                    safepoint = self_read;
+                }
+            }
+
+            // update safepoint for write-write intersection and learn the write
+            match self.writes.entry(candidate_write.clone()) {
+                Entry::Occupied(mut entry) => {
+                    let self_write = entry.insert(candidate.ver);
+                    if self_write > safepoint {
+                        safepoint = self_write
+                    }
+                }
+                Entry::Vacant(entry) => {
+                    entry.insert(candidate.ver);
+                }
+            }
+        }
+        safepoint
+    }
+
     pub fn assess(&mut self, candidate: &Candidate) -> Outcome {
         let mut safepoint = self.base - 1;
 
         // rule R1: commit write-only transactions
         if candidate.readset.is_empty() {
-            for candidate_write in candidate.writeset.iter() {
-                // update read-write safepoint
-                if let Some(&self_read) = self.reads.get(candidate_write) {
-                    if self_read > safepoint {
-                        safepoint = self_read;
-                    }
-                }
-
-                // update safepoint for write-write intersection and learn the write
-                match self.writes.entry(candidate_write.clone()) {
-                    Entry::Occupied(mut entry) => {
-                        let &self_write = entry.get();
-                        if self_write > safepoint {
-                            safepoint = self_write
-                        }
-                        entry.insert(candidate.ver);
-                    }
-                    Entry::Vacant(entry) => {
-                        entry.insert(candidate.ver);
-                    }
-                }
+            // update safepoint for read-write and write-write intersection, and learn the writes
+            let tmp_safepoint = self.update_writes_and_compute_safepoint(&candidate);
+            if tmp_safepoint > safepoint {
+                safepoint = tmp_safepoint;
             }
             return Commit(safepoint, Assertive);
         }
@@ -103,6 +113,7 @@ impl Examiner {
                     return Abort(Antidependency(self_write), Assertive);
                 }
 
+                // update safepoint for write-read intersection
                 if self_write > safepoint {
                     safepoint = self_write;
                 }
@@ -111,26 +122,10 @@ impl Examiner {
 
         // rule R4 conditionally commit
 
-        // update safepoint for read-write and write-write intersection, and learn the write
-        for candidate_write in candidate.writeset.iter() {
-            if let Some(&self_read) = self.reads.get(candidate_write) {
-                if self_read > safepoint {
-                    safepoint = self_read;
-                }
-            }
-
-            match self.writes.entry(candidate_write.clone()) {
-                Entry::Occupied(mut entry) => {
-                    let &self_write = entry.get();
-                    if self_write > safepoint {
-                        safepoint = self_write
-                    }
-                    entry.insert(candidate.ver);
-                }
-                Entry::Vacant(entry) => {
-                    entry.insert(candidate.ver);
-                }
-            }
+        // update safepoint for read-write and write-write intersection, and learn the writes
+        let tmp_safepoint = self.update_writes_and_compute_safepoint(&candidate);
+        if tmp_safepoint > safepoint {
+            safepoint = tmp_safepoint;
         }
 
         // learn the reads
