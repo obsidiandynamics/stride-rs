@@ -1,43 +1,55 @@
-use std::collections::HashMap;
-use crate::Outcome::{Commit, Abort};
+use crate::Outcome::{Abort, Commit};
+use crate::Discord::{Assertive, Permissive};
 use std::collections::hash_map::Entry;
-use crate::Past::{Assertive, Permissive};
+use std::collections::HashMap;
 use uuid::Uuid;
+use crate::AbortReason::{Staleness, Antidependency};
 
 #[derive(Debug)]
-struct Candidate {
-    xid: Uuid,
-    ver: u64,
-    readset: Vec<String>,
-    writeset: Vec<String>,
-    readvers: Vec<u64>,
-    snapshot: u64
+pub struct Candidate {
+    pub xid: Uuid,
+    pub ver: u64,
+    pub readset: Vec<String>,
+    pub writeset: Vec<String>,
+    pub readvers: Vec<u64>,
+    pub snapshot: u64,
 }
 
 #[derive(Debug)]
-struct Examiner {
+pub struct Examiner {
     reads: HashMap<String, u64>,
     writes: HashMap<String, u64>,
-    base: u64
+    base: u64,
 }
 
 #[derive(PartialEq, Debug)]
-enum Outcome {
-    Commit(u64, Past),
-    Abort(Past)
+pub enum Outcome {
+    Commit(u64, Discord),
+    Abort(AbortReason, Discord),
 }
 
 #[derive(PartialEq, Debug)]
-enum Past {
-    Permissive, Assertive
+pub enum AbortReason {
+    Antidependency(u64),
+    Staleness
+}
+
+#[derive(PartialEq, Debug)]
+pub enum Discord {
+    Permissive,
+    Assertive,
 }
 
 impl Examiner {
-    fn new() -> Examiner {
-        Examiner { reads: HashMap::new(), writes: HashMap::new(), base: 1 }
+    pub fn new() -> Examiner {
+        Examiner {
+            reads: HashMap::new(),
+            writes: HashMap::new(),
+            base: 1,
+        }
     }
 
-    fn learn(&mut self, candidate: &Candidate) {
+    pub fn learn(&mut self, candidate: &Candidate) {
         for read in candidate.readset.iter() {
             self.reads.insert(read.clone(), candidate.ver);
         }
@@ -47,25 +59,25 @@ impl Examiner {
         }
     }
 
-    fn assess(&mut self, candidate: &Candidate) -> Outcome {
+    pub fn assess(&mut self, candidate: &Candidate) -> Outcome {
         let mut safepoint = self.base - 1;
 
         // rule R1: commit write-only transactions
         if candidate.readset.is_empty() {
-            for write in candidate.writeset.iter() {
+            for candidate_write in candidate.writeset.iter() {
                 // update read-write safepoint
-                if let Some(&read) = self.reads.get(write) {
-                    if read > safepoint {
-                        safepoint = read;
+                if let Some(&self_read) = self.reads.get(candidate_write) {
+                    if self_read > safepoint {
+                        safepoint = self_read;
                     }
                 }
 
-                // update write-write safepoint and learn the write
-                match self.writes.entry(write.clone()) {
+                // update safepoint for write-write intersection and learn the write
+                match self.writes.entry(candidate_write.clone()) {
                     Entry::Occupied(mut entry) => {
-                        let &write = entry.get();
-                        if write > safepoint {
-                            safepoint = write
+                        let &self_write = entry.get();
+                        if self_write > safepoint {
+                            safepoint = self_write
                         }
                         entry.insert(candidate.ver);
                     }
@@ -74,40 +86,72 @@ impl Examiner {
                     }
                 }
             }
-            return Commit(safepoint, Assertive)
+            return Commit(safepoint, Assertive);
         }
 
         // rule R2: conditionally abort transactions outside the suffix
         if candidate.snapshot < self.base - 1 {
             self.learn(candidate);
-            return Abort(Permissive)
+            return Abort(Staleness, Permissive);
         }
 
         // rule R3: abort on antidependency
-        for read in candidate.readset.iter() {
-            if let Some(&write) = self.writes.get(read) {
-                if write > candidate.snapshot && ! candidate.readvers.contains(&write) {
+        for candidate_read in candidate.readset.iter() {
+            if let Some(&self_write) = self.writes.get(candidate_read) {
+                if self_write > candidate.snapshot && !candidate.readvers.contains(&self_write) {
                     self.learn(candidate);
-                    return Abort(Assertive)
+                    return Abort(Antidependency(self_write), Assertive);
+                }
+
+                if self_write > safepoint {
+                    safepoint = self_write;
                 }
             }
         }
 
         // rule R4 conditionally commit
+
+        // update safepoint for read-write and write-write intersection, and learn the write
+        for candidate_write in candidate.writeset.iter() {
+            if let Some(&self_read) = self.reads.get(candidate_write) {
+                if self_read > safepoint {
+                    safepoint = self_read;
+                }
+            }
+
+            match self.writes.entry(candidate_write.clone()) {
+                Entry::Occupied(mut entry) => {
+                    let &self_write = entry.get();
+                    if self_write > safepoint {
+                        safepoint = self_write
+                    }
+                    entry.insert(candidate.ver);
+                }
+                Entry::Vacant(entry) => {
+                    entry.insert(candidate.ver);
+                }
+            }
+        }
+
+        // learn the reads
+        for candidate_read in candidate.readset.iter() {
+            self.reads.insert(candidate_read.clone(), candidate.ver);
+        }
+
         Commit(safepoint, Permissive)
     }
 
-    fn knows(&self, candidate: &Candidate) -> bool {
+    pub fn knows(&self, candidate: &Candidate) -> bool {
         for read in candidate.readset.iter() {
             match self.reads.get(read) {
                 Some(&ver) if ver >= candidate.ver => {}
-                _ => return false
+                _ => return false,
             }
         }
         for write in candidate.writeset.iter() {
             match self.writes.get(write) {
                 Some(&ver) if ver >= candidate.ver => {}
-                _ => return false
+                _ => return false,
             }
         }
         true
@@ -116,10 +160,11 @@ impl Examiner {
 
 #[cfg(test)]
 mod tests {
-    use super::{Examiner, Candidate};
-    use crate::Outcome::{Commit, Abort};
-    use crate::Past::{Assertive, Permissive};
+    use super::{Candidate, Examiner};
+    use crate::Outcome::{Abort, Commit};
+    use crate::Discord::{Assertive, Permissive};
     use uuid::Uuid;
+    use crate::AbortReason::{Staleness, Antidependency};
 
     #[test]
     fn learn_forget() {
@@ -130,12 +175,11 @@ mod tests {
             readset: vec!["x".into()],
             writeset: vec!["y".into()],
             readvers: vec![],
-            snapshot: 0
+            snapshot: 0,
         };
-        println!("candidate {:?}", candidate);
         assert!(!examiner.knows(&candidate));
         examiner.learn(&candidate);
-        assert!(examiner.knows(&candidate));
+        assert_learned(&examiner, &candidate)
         //TODO test forget()
     }
 
@@ -149,7 +193,7 @@ mod tests {
             readset: vec!["x".into(), "y".into()],
             writeset: vec!["x".into(), "y".into()],
             readvers: vec![],
-            snapshot: 0
+            snapshot: 0,
         });
         examiner.learn(&Candidate {
             xid: Uuid::from_u128(2),
@@ -157,7 +201,7 @@ mod tests {
             readset: vec!["x".into(), "y".into()],
             writeset: vec![],
             readvers: vec![4],
-            snapshot: 0
+            snapshot: 0,
         });
         let candidate = Candidate {
             xid: Uuid::from_u128(3),
@@ -165,12 +209,12 @@ mod tests {
             readset: vec![],
             writeset: vec!["x".into(), "y".into()],
             readvers: vec![],
-            snapshot: 4
+            snapshot: 4,
         };
         assert!(!examiner.knows(&candidate));
         let outcome = examiner.assess(&candidate);
         assert_eq!(Commit(5, Assertive), outcome);
-        assert!(examiner.knows(&candidate));
+        assert_learned(&examiner, &candidate)
     }
 
     #[test]
@@ -183,7 +227,7 @@ mod tests {
             readset: vec!["x".into(), "y".into()],
             writeset: vec!["x".into(), "y".into()],
             readvers: vec![],
-            snapshot: 11
+            snapshot: 11,
         });
         examiner.learn(&Candidate {
             xid: Uuid::from_u128(2),
@@ -191,7 +235,7 @@ mod tests {
             readset: vec!["x".into(), "y".into()],
             writeset: vec![],
             readvers: vec![],
-            snapshot: 12
+            snapshot: 12,
         });
         examiner.learn(&Candidate {
             xid: Uuid::from_u128(3),
@@ -199,7 +243,7 @@ mod tests {
             readset: vec![],
             writeset: vec!["x".into(), "y".into()],
             readvers: vec![],
-            snapshot: 5
+            snapshot: 5,
         });
         let candidate = Candidate {
             xid: Uuid::from_u128(4),
@@ -207,12 +251,12 @@ mod tests {
             readset: vec!["v".into(), "w".into()],
             writeset: vec!["z".into()],
             readvers: vec![],
-            snapshot: 10
+            snapshot: 10,
         };
         assert!(!examiner.knows(&candidate));
         let outcome = examiner.assess(&candidate);
-        assert_eq!(Abort(Permissive), outcome);
-        assert!(examiner.knows(&candidate));
+        assert_eq!(Abort(Staleness, Permissive), outcome);
+        assert_learned(&examiner, &candidate)
     }
 
     #[test]
@@ -225,7 +269,7 @@ mod tests {
             readset: vec!["x".into(), "y".into()],
             writeset: vec![],
             readvers: vec![],
-            snapshot: 19
+            snapshot: 19,
         });
         examiner.learn(&Candidate {
             xid: Uuid::from_u128(2),
@@ -233,7 +277,7 @@ mod tests {
             readset: vec!["x".into(), "y".into()],
             writeset: vec!["x".into(), "y".into()],
             readvers: vec![],
-            snapshot: 22
+            snapshot: 22,
         });
         examiner.learn(&Candidate {
             xid: Uuid::from_u128(3),
@@ -241,7 +285,7 @@ mod tests {
             readset: vec![],
             writeset: vec!["y".into(), "z".into()],
             readvers: vec![],
-            snapshot: 25
+            snapshot: 25,
         });
         examiner.learn(&Candidate {
             xid: Uuid::from_u128(4),
@@ -249,7 +293,7 @@ mod tests {
             readset: vec!["v".into(), "w".into()],
             writeset: vec![],
             readvers: vec![],
-            snapshot: 26
+            snapshot: 26,
         });
         let candidate = Candidate {
             xid: Uuid::from_u128(5),
@@ -257,25 +301,92 @@ mod tests {
             readset: vec!["x".into(), "z".into()],
             writeset: vec!["z".into()],
             readvers: vec![25],
-            snapshot: 23
+            snapshot: 23,
         };
         assert!(!examiner.knows(&candidate));
         let outcome = examiner.assess(&candidate);
-        assert_eq!(Abort(Assertive), outcome);
-        assert!(examiner.knows(&candidate));
+        assert_eq!(Abort(Antidependency(26), Assertive), outcome);
+        assert_learned(&examiner, &candidate)
     }
-    // fn assert_learned(examiner: &Examiner, candidate: &Candidate) {
-    //     for read in candidate.readset.iter() {
-    //         match examiner.reads.get(read) {
-    //             Some(&ver) if ver >= candidate.ver => {}
-    //             _ => panic!("{:?} not known to {:?} for read of {}", candidate, examiner, read)
-    //         }
-    //     }
-    //     for write in candidate.writeset.iter() {
-    //         match examiner.writes.get(write) {
-    //             Some(&ver) if ver >= candidate.ver => {}
-    //             _ => panic!("{:?} not known to {:?} for write of {}", candidate, examiner, write)
-    //         }
-    //     }
-    // }
+
+    #[test]
+    fn paper_example_4() {
+        let mut examiner = Examiner::new();
+        examiner.base = 30;
+        examiner.learn(&Candidate {
+            xid: Uuid::from_u128(1),
+            ver: 30,
+            readset: vec!["x".into(), "y".into()],
+            writeset: vec![],
+            readvers: vec![],
+            snapshot: 23,
+        });
+        examiner.learn(&Candidate {
+            xid: Uuid::from_u128(2),
+            ver: 31,
+            readset: vec!["x".into(), "y".into()],
+            writeset: vec!["w".into(), "x".into()],
+            readvers: vec![],
+            snapshot: 24,
+        });
+        examiner.learn(&Candidate {
+            xid: Uuid::from_u128(3),
+            ver: 32,
+            readset: vec![],
+            writeset: vec!["y".into()],
+            readvers: vec![],
+            snapshot: 25,
+        });
+        examiner.learn(&Candidate {
+            xid: Uuid::from_u128(4),
+            ver: 33,
+            readset: vec!["v".into(), "z".into()],
+            writeset: vec!["y".into()],
+            readvers: vec![],
+            snapshot: 26,
+        });
+        examiner.learn(&Candidate {
+            xid: Uuid::from_u128(5),
+            ver: 34,
+            readset: vec![],
+            writeset: vec!["w".into()],
+            readvers: vec![],
+            snapshot: 31,
+        });
+        let candidate = Candidate {
+            xid: Uuid::from_u128(6),
+            ver: 35,
+            readset: vec!["x".into(), "z".into()],
+            writeset: vec!["z".into()],
+            readvers: vec![],
+            snapshot: 31,
+        };
+        assert!(!examiner.knows(&candidate));
+        let outcome = examiner.assess(&candidate);
+        assert_eq!(Commit(33, Permissive), outcome);
+        assert_learned(&examiner, &candidate)
+    }
+
+    fn assert_learned(examiner: &Examiner, candidate: &Candidate) {
+        if !examiner.knows(&candidate) {
+            for read in candidate.readset.iter() {
+                match examiner.reads.get(read) {
+                    Some(&ver) if ver >= candidate.ver => {}
+                    _ => panic!(
+                        "{:?} not known to {:?} for read of {}",
+                        candidate, examiner, read
+                    ),
+                }
+            }
+            for write in candidate.writeset.iter() {
+                match examiner.writes.get(write) {
+                    Some(&ver) if ver >= candidate.ver => {}
+                    _ => panic!(
+                        "{:?} not known to {:?} for write of {}",
+                        candidate, examiner, write
+                    ),
+                }
+            }
+        }
+    }
 }
