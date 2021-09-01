@@ -1,10 +1,11 @@
+mod havoc;
+
 use crate::Outcome::{Abort, Commit};
 use crate::Discord::{Assertive, Permissive};
 use std::collections::hash_map::Entry;
-use std::collections::HashMap;
 use uuid::Uuid;
 use crate::AbortReason::{Staleness, Antidependency};
-use std::hash::BuildHasherDefault;
+use rustc_hash::FxHashMap;
 
 #[derive(Debug)]
 pub struct Candidate {
@@ -18,8 +19,8 @@ pub struct Candidate {
 
 #[derive(Debug)]
 pub struct Examiner {
-    reads: HashMap<String, u64, BuildHasherDefault<hashers::fx_hash::FxHasher>>,
-    writes: HashMap<String, u64, BuildHasherDefault<hashers::fx_hash::FxHasher>>,
+    reads: FxHashMap<String, u64>,
+    writes: FxHashMap<String, u64>,
     base: u64,
 }
 
@@ -44,8 +45,8 @@ pub enum Discord {
 impl Examiner {
     pub fn new() -> Examiner {
         Examiner {
-            reads: HashMap::with_hasher(BuildHasherDefault::default()),
-            writes: HashMap::with_hasher(BuildHasherDefault::default()),
+            reads: FxHashMap::default(),
+            writes: FxHashMap::default(),
             base: 1,
         }
     }
