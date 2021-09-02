@@ -50,22 +50,22 @@ impl<'a> Counter<'a> {
     }
 }
 
-pub struct Lock<'a> {
-    owner: Option<&'a str>
+pub struct Lock<> {
+    owner: Option<String>
 }
 
-impl <'a> Lock<'a> {
+impl Lock {
     pub fn new() -> Self {
         Lock { owner: None }
     }
 
-    pub fn lock(&mut self, owner: &'a str) -> bool {
-        match self.owner {
+    pub fn lock(&mut self, owner: String) -> bool {
+        match &self.owner {
             None => {
                 self.owner = Some(owner);
                 true
             }
-            Some(existing) if existing == owner => {
+            Some(existing) if *existing == owner => {
                 true
             },
             Some(_) => false
@@ -73,7 +73,7 @@ impl <'a> Lock<'a> {
     }
 
     pub fn held(&self, owner: &str) -> bool {
-        match self.owner {
+        match &self.owner {
             Some(existing) if existing == owner => {
                 true
             },

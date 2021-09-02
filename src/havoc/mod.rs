@@ -1,5 +1,5 @@
 use rustc_hash::FxHashSet;
-use crate::havoc::ExecutionResult::{Flawless, Deadlocked};
+use crate::havoc::CheckResult::{Flawless, Deadlocked};
 
 pub struct Model<'a, S> {
     setup: Box<dyn Fn() -> S + 'a>,
@@ -15,7 +15,7 @@ pub enum ActionResult {
 
 struct ActionEntry<'a, S> {
     name: String,
-    action: Box<dyn Fn(&mut S) -> ActionResult + 'a>,
+    action: Box<dyn Fn(&mut S, &Context) -> ActionResult + 'a>,
 }
 
 impl<'a, S> Model<'a, S> {
@@ -24,13 +24,13 @@ impl<'a, S> Model<'a, S> {
         Model { setup: Box::new(setup), actions: vec![] }
     }
 
-    fn push<F>(&mut self, name: String, action: F)
-        where F: Fn(&mut S) -> ActionResult + 'a {
+    pub fn push<F>(&mut self, name: String, action: F)
+        where F: Fn(&mut S, &Context) -> ActionResult + 'a {
         self.actions.push(ActionEntry { name, action: Box::new(action) });
     }
 }
 
-struct Executor<'a, S> {
+pub struct Checker<'a, S> {
     model: &'a Model<'a, S>,
     stack: Vec<Frame>,
     depth: usize,
@@ -45,15 +45,25 @@ struct Frame {
 }
 
 #[derive(PartialEq, Debug)]
-enum ExecutionResult {
+pub enum CheckResult {
     Flawless,
     Flawed,
     Deadlocked
 }
 
-impl<'a, S> Executor<'a, S> {
-    fn new(model: &'a Model<'a, S>) -> Self {
-        Executor { model, stack: vec![], depth: 0, live: FxHashSet::default() }
+pub struct Context<'a> {
+    name: &'a str
+}
+
+impl Context<'_> {
+    pub fn name(&self) -> &str {
+        self.name
+    }
+}
+
+impl<'a, S> Checker<'a, S> {
+    pub fn new(model: &'a Model<'a, S>) -> Self {
+        Checker { model, stack: vec![], depth: 0, live: FxHashSet::default() }
     }
 
     fn reset_live(&mut self) {
@@ -90,7 +100,7 @@ impl<'a, S> Executor<'a, S> {
         Some((*self.model.setup)())
     }
 
-    fn run(mut self) -> ExecutionResult {
+    pub fn check(mut self) -> CheckResult {
         self.reset_live();
 
         let mut i = 0;
@@ -99,7 +109,7 @@ impl<'a, S> Executor<'a, S> {
             i += 1;
             if i > 70 {
                 println!("TOO MANY RUNS");
-                return ExecutionResult::Flawed
+                return CheckResult::Flawed
             }
 
             if self.depth == self.stack.len() {
@@ -123,7 +133,8 @@ impl<'a, S> Executor<'a, S> {
             let top = &self.stack[self.depth];
             let action_entry = &self.model.actions[top.index];
             println!("  running {}", action_entry.name);
-            let result = (*action_entry.action)(&mut state);
+            let context = Context { name: &action_entry.name };
+            let result = (*action_entry.action)(&mut state, &context);
 
             match result {
                 ActionResult::Ran => {
