@@ -45,10 +45,12 @@ struct Executor<'a> {
     live: FxHashSet<usize> // indexes of live actions
 }
 
+#[derive(Debug)]
 struct Frame {
     index: usize
 }
 
+#[derive(PartialEq, Debug)]
 enum ExecutionResult {
     Flawless,
     Flawed,
@@ -60,32 +62,94 @@ impl<'a> Executor<'a> {
         Executor { model, stack: vec![], depth: 0, live: FxHashSet::default() }
     }
 
-    fn run(&mut self) -> ExecutionResult {
+    fn reset_live(&mut self) {
+        println!("NEW RUN");
         for i in 0..self.model.actions.len() {
             self.live.insert(i);
         }
+    }
 
+    fn run(&mut self) -> ExecutionResult {
+        self.reset_live();
+
+        let mut i = 0;
         loop {
+            i += 1;
+            if i > 30 {
+                println!("TOO MANY RUNS");
+                return ExecutionResult::Flawed
+            }
+
             if self.depth == self.stack.len() {
+                print!("pushing...");
                 self.stack.push(Frame { index: 0 });
             }
+            println!("depth: {}, stack {:?}", self.depth, self.stack);
+            let top = &self.stack[self.depth];
+            if !self.live.contains(&top.index) {
+                println!("  skipping {} due to join", top.index);
+
+                // let top = &mut self.stack[self.depth];
+                // loop {
+                //     if top.index + 1 == self.model.actions.len() {
+                //         break
+                //     }
+                // }
+                // let top = &mut self.stack[self.depth];
+                // top.index += 1;
+                if top.index + 1 == self.model.actions.len() {
+                    println!("    exhausted");
+                    loop {
+                        let mut top = &mut self.stack[self.depth];
+                        top.index += 1;
+                        println!("    top {:?}", top);
+                        if top.index == self.model.actions.len() {
+                            self.stack.remove(self.depth);
+                            println!("    popped {}", self.depth);
+                            if self.depth > 0 {
+                                self.depth -= 1;
+                            } else {
+                                return Flawless
+                            }
+                        } else {
+                            break
+                        }
+                    }
+                    self.depth = 0;
+                    self.reset_live();
+                } else {
+                    let top = &mut self.stack[self.depth];
+                    top.index += 1;
+                    continue
+                }
+            }
+
             let top = &self.stack[self.depth];
             let action_entry = &self.model.actions[top.index];
+            println!("  running {}", action_entry.name);
             let result = (*action_entry.action)();
 
             match result {
                 ActionResult::Ran => {
+                    println!("    ran");
                     self.depth += 1;
                 }
                 ActionResult::Blocked => {}
                 ActionResult::Joined => {
+                    println!("    joined");
                     self.live.remove(&top.index);
                     if self.live.is_empty() {
-                       loop {
+                        // experimental
+                        let mut top = &mut self.stack[self.depth];
+                        top.index = self.model.actions.len() - 1;
+
+                        loop {
                             let mut top = &mut self.stack[self.depth];
                             top.index += 1;
+                            println!("    top {:?}", top);
                             if top.index == self.model.actions.len() {
                                 self.stack.remove(self.depth);
+                                println!("    popped {}", self.depth);
                                 if self.depth > 0 {
                                     self.depth -= 1;
                                 } else {
@@ -96,6 +160,10 @@ impl<'a> Executor<'a> {
                             }
                         }
                         self.depth = 0;
+                        self.reset_live();
+                    } else {
+                        let mut top = &mut self.stack[self.depth];
+                        self.depth += 1;
                     }
                 }
                 ActionResult::Panicked => {}
@@ -129,7 +197,7 @@ mod tests {
         });
 
         let mut executor = Executor::new(&model);
-        executor.run();
+        assert_eq!(ExecutionResult::Flawless, executor.run());
         assert_eq!(1, run_count.get());
     }
 
@@ -147,7 +215,7 @@ mod tests {
         });
 
         let mut executor = Executor::new(&model);
-        executor.run();
+        assert_eq!(ExecutionResult::Flawless, executor.run());
         assert_eq!(2, run_count.get());
     }
 
@@ -181,13 +249,46 @@ mod tests {
 
     #[test]
     fn two_actions() {
+        println!("two actions");
         let run_count = RefCell::new(Counter::new());
         let mut model = Model::new();
         model.push("two_actions_0".into(), || {
             run_count.borrow_mut().add("two_actions_0");
             Joined
         });
-        Executor::new(&model).run();
-        assert_eq!(1, run_count.borrow_mut().get("two_actions_0"));
+        model.push("two_actions_1".into(), || {
+            run_count.borrow_mut().add("two_actions_1");
+            Joined
+        });
+        let mut executor = Executor::new(&model);
+        let result = executor.run();
+        assert_eq!(2, run_count.borrow().get("two_actions_0"));
+        assert_eq!(2, run_count.borrow().get("two_actions_1"));
+        assert_eq!(ExecutionResult::Flawless, result);
+    }
+
+    #[test]
+    fn three_actions() {
+        println!("three actions");
+        let run_count = RefCell::new(Counter::new());
+        let mut model = Model::new();
+        model.push("three_actions_a".into(), || {
+            run_count.borrow_mut().add("three_actions_a");
+            Joined
+        });
+        model.push("three_actions_b".into(), || {
+            run_count.borrow_mut().add("three_actions_b");
+            Joined
+        });
+        model.push("three_actions_c".into(), || {
+            run_count.borrow_mut().add("three_actions_c");
+            Joined
+        });
+        let mut executor = Executor::new(&model);
+        let result = executor.run();
+        assert_eq!(6, run_count.borrow().get("three_actions_a"));
+        assert_eq!(6, run_count.borrow().get("three_actions_b"));
+        assert_eq!(6, run_count.borrow().get("three_actions_c"));
+        assert_eq!(ExecutionResult::Flawless, result);
     }
 }
