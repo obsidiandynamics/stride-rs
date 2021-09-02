@@ -47,7 +47,8 @@ struct Executor<'a> {
 
 #[derive(Debug)]
 struct Frame {
-    index: usize
+    index: usize,
+    live_snapshot: FxHashSet<usize>
 }
 
 #[derive(PartialEq, Debug)]
@@ -63,7 +64,7 @@ impl<'a> Executor<'a> {
     }
 
     fn reset_live(&mut self) {
-        println!("NEW RUN");
+        println!("NEW RUN---------------------");
         for i in 0..self.model.actions.len() {
             self.live.insert(i);
         }
@@ -82,7 +83,7 @@ impl<'a> Executor<'a> {
 
             if self.depth == self.stack.len() {
                 print!("pushing...");
-                self.stack.push(Frame { index: 0 });
+                self.stack.push(Frame { index: 0, live_snapshot: self.live.clone() });
             }
             println!("depth: {}, stack {:?}", self.depth, self.stack);
             let top = &self.stack[self.depth];
@@ -140,12 +141,17 @@ impl<'a> Executor<'a> {
                     self.live.remove(&top.index);
                     if self.live.is_empty() {
                         // experimental
-                        let mut top = &mut self.stack[self.depth];
-                        top.index = self.model.actions.len() - 1;
+                        // let mut top = &mut self.stack[self.depth];
+                        // top.index = self.model.actions.len() - 1;
 
                         loop {
                             let mut top = &mut self.stack[self.depth];
-                            top.index += 1;
+                            loop {
+                                top.index += 1;
+                                if top.index == self.model.actions.len() || top.live_snapshot.contains(&top.index) {
+                                    break;
+                                }
+                            }
                             println!("    top {:?}", top);
                             if top.index == self.model.actions.len() {
                                 self.stack.remove(self.depth);
@@ -252,18 +258,38 @@ mod tests {
         println!("two actions");
         let run_count = RefCell::new(Counter::new());
         let mut model = Model::new();
-        model.push("two_actions_0".into(), || {
-            run_count.borrow_mut().add("two_actions_0");
+        model.push("two_actions_a".into(), || {
+            run_count.borrow_mut().add("two_actions_a");
             Joined
         });
-        model.push("two_actions_1".into(), || {
-            run_count.borrow_mut().add("two_actions_1");
+        model.push("two_actions_b".into(), || {
+            run_count.borrow_mut().add("two_actions_b");
             Joined
         });
         let mut executor = Executor::new(&model);
         let result = executor.run();
-        assert_eq!(2, run_count.borrow().get("two_actions_0"));
-        assert_eq!(2, run_count.borrow().get("two_actions_1"));
+        assert_eq!(2, run_count.borrow().get("two_actions_a"));
+        assert_eq!(2, run_count.borrow().get("two_actions_b"));
+        assert_eq!(ExecutionResult::Flawless, result);
+    }
+
+    #[test]
+    fn two_actions_by_two() {
+        println!("two actions by two");
+        let run_count = RefCell::new(Counter::new());
+        let mut model = Model::new();
+        model.push("two_actions_by_two_0".into(), || {
+            run_count.borrow_mut().add("two_actions_by_two_0");
+            Joined
+        });
+        model.push("two_actions_by_two_1".into(), || {
+            run_count.borrow_mut().add("two_actions_by_two_1");
+            Joined
+        });
+        let mut executor = Executor::new(&model);
+        let result = executor.run();
+        assert_eq!(2, run_count.borrow().get("two_actions_by_two_0"));
+        assert_eq!(2, run_count.borrow().get("two_actions_by_two_1"));
         assert_eq!(ExecutionResult::Flawless, result);
     }
 
