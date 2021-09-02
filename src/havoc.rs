@@ -49,7 +49,8 @@ struct Executor<'a, S> {
 #[derive(Debug)]
 struct Frame {
     index: usize,
-    live_snapshot: FxHashSet<usize>
+    live_snapshot: FxHashSet<usize>,
+    blocked: usize
 }
 
 #[derive(PartialEq, Debug)]
@@ -71,6 +72,33 @@ impl<'a, S> Executor<'a, S> {
         }
     }
 
+    fn unwind(&mut self) -> Option<S> {
+        loop {
+            let mut top = &mut self.stack[self.depth];
+            loop {
+                top.index += 1;
+                if top.index == self.model.actions.len() || top.live_snapshot.contains(&top.index) {
+                    break;
+                }
+            }
+            println!("    top {:?}", top);
+            if top.index == self.model.actions.len() {
+                self.stack.remove(self.depth);
+                println!("    popped {}", self.depth);
+                if self.depth > 0 {
+                    self.depth -= 1;
+                } else {
+                    return None
+                }
+            } else {
+                break
+            }
+        }
+        self.depth = 0;
+        self.reset_live();
+        Some((*self.model.setup)())
+    }
+
     fn run(&mut self) -> ExecutionResult {
         self.reset_live();
 
@@ -85,7 +113,7 @@ impl<'a, S> Executor<'a, S> {
 
             if self.depth == self.stack.len() {
                 print!("pushing...");
-                self.stack.push(Frame { index: 0, live_snapshot: self.live.clone() });
+                self.stack.push(Frame { index: 0, live_snapshot: self.live.clone(), blocked: 0 });
             }
             println!("depth: {}, stack {:?}", self.depth, self.stack);
             let top = &self.stack[self.depth];
@@ -141,13 +169,21 @@ impl<'a, S> Executor<'a, S> {
                 ActionResult::Blocked => {
                     println!("    blocked");
                     let mut top = &mut self.stack[self.depth];
-                    top.index += 1;
+                    top.blocked += 1;
 
-                    if top.index == self.model.actions.len() {
-                        // println!("      deadlocked");
-                        // return Deadlocked
-                        // println!("      recycling");
-                        top.index = 0
+                    if top.index + 1 == self.model.actions.len() {
+                        if top.blocked == self.live.len() {
+                            println!("      deadlocked");
+                            return Deadlocked
+                        } else {
+                            println!("      abandoning");
+                            match self.unwind() {
+                                None => return Flawless,
+                                Some(s) => state = s
+                            }
+                        }
+                    } else {
+                        top.index += 1;
                     }
                     continue
                 }
@@ -471,73 +507,45 @@ mod tests {
         assert_eq!(ExecutionResult::Flawless, executor.run());
     }
 
-    // #[test]
-    // fn two_actions_deadlock() {
-    //     let mut model = Model::new(|| vec![Lock::new(), Lock::new()]);
-    //     model.push("two_actions_deadlock_a".into(), |s| {
-    //         if s[0].locked("two_actions_deadlock_a") {
-    //             if s[1].locked("two_actions_deadlock_a") {
-    //                 s[1].unlock();
-    //                 s[0].unlock();
-    //                 Joined
-    //             } else if s[1].lock("two_actions_deadlock_a") {
-    //                 Ran
-    //             } else {
-    //                 Blocked
-    //             }
-    //         } else if s[0].lock("two_actions_deadlock_a") {
-    //             Ran
-    //         } else {
-    //             Blocked
-    //         }
-    //         // match s.get("lock") {
-    //         //     0 => {
-    //         //         s.add("lock");
-    //         //         s.add("two_actions_deadlock_a");
-    //         //         Ran
-    //         //     },
-    //         //     _ => match s.get("two_actions_deadlock_a") {
-    //         //         1 => {
-    //         //             s.reset("lock");
-    //         //             Joined
-    //         //         },
-    //         //         _ => Blocked
-    //         //     }
-    //         // }
-    //     });
-    //     model.push("two_actions_deadlock_b".into(), |s| {
-    //         if s[0].locked("two_actions_deadlock_b") {
-    //             if s[1].locked("two_actions_deadlock_b") {
-    //                 s[1].unlock();
-    //                 s[0].unlock();
-    //                 Joined
-    //             } else if s[1].lock("two_actions_deadlock_b") {
-    //                 Ran
-    //             } else {
-    //                 Blocked
-    //             }
-    //         } else if s[0].lock("two_actions_deadlock_b") {
-    //             Ran
-    //         } else {
-    //             Blocked
-    //         }
-    //         // match s.get("lock") {
-    //         //     0 => {
-    //         //         s.add("lock");
-    //         //         s.add("two_actions_deadlock_a");
-    //         //         Ran
-    //         //     },
-    //         //     _ => match s.get("two_actions_deadlock_a") {
-    //         //         1 => {
-    //         //             s.reset("lock");
-    //         //             Joined
-    //         //         },
-    //         //         _ => Blocked
-    //         //     }
-    //         // }
-    //     });
-    //
-    //     let mut executor = Executor::new(&model);
-    //     assert_eq!(ExecutionResult::Deadlocked, executor.run());
-    // }
+    #[test]
+    fn two_actions_deadlock() {
+        let mut model = Model::new(|| vec![Lock::new(), Lock::new()]);
+        model.push("two_actions_deadlock_a".into(), |s| {
+            if s[0].locked("two_actions_deadlock_a") {
+                if s[1].locked("two_actions_deadlock_a") {
+                    s[1].unlock();
+                    s[0].unlock();
+                    Joined
+                } else if s[1].lock("two_actions_deadlock_a") {
+                    Ran
+                } else {
+                    Blocked
+                }
+            } else if s[0].lock("two_actions_deadlock_a") {
+                Ran
+            } else {
+                Blocked
+            }
+        });
+        model.push("two_actions_deadlock_b".into(), |s| {
+            if s[1].locked("two_actions_deadlock_b") {
+                if s[0].locked("two_actions_deadlock_b") {
+                    s[0].unlock();
+                    s[1].unlock();
+                    Joined
+                } else if s[0].lock("two_actions_deadlock_b") {
+                    Ran
+                } else {
+                    Blocked
+                }
+            } else if s[1].lock("two_actions_deadlock_b") {
+                Ran
+            } else {
+                Blocked
+            }
+        });
+
+        let mut executor = Executor::new(&model);
+        assert_eq!(ExecutionResult::Deadlocked, executor.run());
+    }
 }
