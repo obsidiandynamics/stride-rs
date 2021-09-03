@@ -4,6 +4,7 @@ use super::*;
 use crate::havoc::ActionResult::*;
 use std::cell::{Cell, RefCell};
 use crate::havoc::tests::common::{Counter, Lock};
+use crate::havoc::Retention::Weak;
 
 #[test]
 fn one_shot() {
@@ -226,4 +227,28 @@ fn two_actions_deadlock() {
 
     let checker = Checker::new(&model);
     assert_eq!(CheckResult::Deadlocked, checker.check());
+}
+
+#[test]
+fn two_actions_one_weak() {
+    let total_runs = RefCell::new(Counter::new());
+    let mut model = Model::new(Counter::new);
+    model.push("two_actions_one_weak_a".into(), Strong, |s, c| {
+        total_runs.borrow_mut().inc(c.name().into());
+        s.inc(c.name().into());
+        Joined
+    });
+    model.push("two_actions_one_weak_b".into(), Weak, |s, c| {
+        assert_eq!(0, s.get("two_actions_one_weak_a"), "b should not run after a's join");
+        total_runs.borrow_mut().inc(c.name().into());
+        match s.inc(c.name().into()) {
+            2 => Joined,
+            _ => Ran
+        }
+    });
+    let checker = Checker::new(&model);
+    let result = checker.check();
+    assert_eq!(3, total_runs.borrow().get("two_actions_one_weak_a"));
+    assert_eq!(3, total_runs.borrow().get("two_actions_one_weak_b"));
+    assert_eq!(CheckResult::Flawless, result);
 }
