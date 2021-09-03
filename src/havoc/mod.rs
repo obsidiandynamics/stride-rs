@@ -1,5 +1,6 @@
 use rustc_hash::FxHashSet;
 use crate::havoc::CheckResult::{Flawless, Deadlocked};
+use crate::havoc::Retention::Strong;
 
 pub struct Model<'a, S> {
     setup: Box<dyn Fn() -> S + 'a>,
@@ -13,8 +14,14 @@ pub enum ActionResult {
     Panicked
 }
 
+#[derive(PartialEq, Debug)]
+pub enum Retention {
+    Strong, Weak
+}
+
 struct ActionEntry<'a, S> {
     name: String,
+    retention: Retention,
     action: Box<dyn Fn(&mut S, &Context) -> ActionResult + 'a>,
 }
 
@@ -24,9 +31,9 @@ impl<'a, S> Model<'a, S> {
         Model { setup: Box::new(setup), actions: vec![] }
     }
 
-    pub fn push<F>(&mut self, name: String, action: F)
+    pub fn push<F>(&mut self, name: String, retention: Retention, action: F)
         where F: Fn(&mut S, &Context) -> ActionResult + 'a {
-        self.actions.push(ActionEntry { name, action: Box::new(action) });
+        self.actions.push(ActionEntry { name, retention, action: Box::new(action) });
     }
 }
 
@@ -34,7 +41,8 @@ pub struct Checker<'a, S> {
     model: &'a Model<'a, S>,
     stack: Vec<Frame>,
     depth: usize,
-    live: FxHashSet<usize> // indexes of live actions
+    live: FxHashSet<usize>, // indexes of live actions
+    strong_count: usize
 }
 
 #[derive(Debug)]
@@ -63,14 +71,18 @@ impl Context<'_> {
 
 impl<'a, S> Checker<'a, S> {
     pub fn new(model: &'a Model<'a, S>) -> Self {
-        Checker { model, stack: vec![], depth: 0, live: FxHashSet::default() }
+        Checker { model, stack: vec![], depth: 0, live: FxHashSet::default(), strong_count: 0 }
     }
 
     fn reset_live(&mut self) {
+        //todo live and strong_count can be cached and cloned
         println!("NEW RUN---------------------");
         for i in 0..self.model.actions.len() {
             self.live.insert(i);
         }
+        self.depth = 0;
+        self.strong_count = self.model.actions
+            .iter().filter(|entry| entry.retention == Strong).count();
     }
 
     fn unwind(&mut self) -> Option<S> {
@@ -95,7 +107,6 @@ impl<'a, S> Checker<'a, S> {
                 break
             }
         }
-        self.depth = 0;
         self.reset_live();
         Some((*self.model.setup)())
     }
@@ -165,7 +176,12 @@ impl<'a, S> Checker<'a, S> {
                 ActionResult::Joined => {
                     println!("    joined");
                     self.live.remove(&top.index);
-                    if self.live.is_empty() {
+                    if self.model.actions[top.index].retention == Strong {
+                        self.strong_count -= 1;
+                    }
+
+                    if self.strong_count == 0 {
+                        println!("    no more strong actions");
                         match self.unwind() {
                             None => return Flawless,
                             Some(s) => state = s

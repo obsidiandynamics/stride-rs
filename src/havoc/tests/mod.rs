@@ -9,7 +9,7 @@ use crate::havoc::tests::common::{Counter, Lock};
 fn one_shot() {
     let run_count = Cell::new(0);
     let mut model = Model::new(Counter::new);
-    model.push("one_shot".into(), |_, _| {
+    model.push("one_shot".into(), Strong, |_, _| {
         run_count.set(run_count.get() + 1);
         ActionResult::Joined
     });
@@ -23,7 +23,7 @@ fn one_shot() {
 fn two_shot() {
     let run_count = Cell::new(0);
     let mut model = Model::new(Counter::new);
-    model.push("two_shot".into(), |s, c| {
+    model.push("two_shot".into(), Strong, |s, c| {
         run_count.set(run_count.get() + 1);
         match s.inc(c.name().into()) {
             2 => ActionResult::Joined,
@@ -40,11 +40,11 @@ fn two_shot() {
 fn two_actions() {
     let total_runs = RefCell::new(Counter::new());
     let mut model = Model::new(Counter::new);
-    model.push("two_actions_a".into(), |_, c| {
+    model.push("two_actions_a".into(), Strong, |_, c| {
         total_runs.borrow_mut().inc(c.name().into());
         Joined
     });
-    model.push("two_actions_b".into(), |_, c| {
+    model.push("two_actions_b".into(), Strong, |_, c| {
         total_runs.borrow_mut().inc(c.name().into());
         Joined
     });
@@ -59,12 +59,12 @@ fn two_actions() {
 fn two_actions_conditional() {
     let total_runs = RefCell::new(Counter::new());
     let mut model = Model::new(Counter::new);
-    model.push("two_actions_conditional_a".into(), |s, c| {
+    model.push("two_actions_conditional_a".into(), Strong, |s, c| {
         total_runs.borrow_mut().inc(c.name().into());
         s.inc(c.name().into());
         Joined
     });
-    model.push("two_actions_conditional_b".into(), |s, c| {
+    model.push("two_actions_conditional_b".into(), Strong, |s, c| {
         total_runs.borrow_mut().inc(c.name().into());
         if s.inc(c.name().into()) == 0 && s.get("two_actions_conditional_a") == 0 {
             return Ran
@@ -82,11 +82,11 @@ fn two_actions_conditional() {
 fn two_actions_by_two() {
     let total_runs = RefCell::new(Counter::new());
     let mut model = Model::new(Counter::new);
-    model.push("two_actions_by_two_0".into(), |_, c| {
+    model.push("two_actions_by_two_0".into(), Strong, |_, c| {
         total_runs.borrow_mut().inc(c.name().into());
         Joined
     });
-    model.push("two_actions_by_two_1".into(), |s, c| {
+    model.push("two_actions_by_two_1".into(), Strong, |s, c| {
         total_runs.borrow_mut().inc(c.name().into());
         match s.inc(c.name().into()) {
             2 => Joined,
@@ -104,15 +104,15 @@ fn two_actions_by_two() {
 fn three_actions() {
     let total_runs = RefCell::new(Counter::new());
     let mut model = Model::new(Counter::new);
-    model.push("three_actions_a".into(), |_, c| {
+    model.push("three_actions_a".into(), Strong, |_, c| {
         total_runs.borrow_mut().inc(c.name().into());
         Joined
     });
-    model.push("three_actions_b".into(), |_, c| {
+    model.push("three_actions_b".into(), Strong, |_, c| {
         total_runs.borrow_mut().inc(c.name().into());
         Joined
     });
-    model.push("three_actions_c".into(), |_, c| {
+    model.push("three_actions_c".into(), Strong, |_, c| {
         total_runs.borrow_mut().inc(c.name().into());
         Joined
     });
@@ -128,15 +128,15 @@ fn three_actions() {
 fn three_actions_by_two() {
     let total_runs = RefCell::new(Counter::new());
     let mut model = Model::new(Counter::new);
-    model.push("three_actions_by_two_a".into(), |_, c| {
+    model.push("three_actions_by_two_a".into(), Strong, |_, c| {
         total_runs.borrow_mut().inc(c.name().into());
         Joined
     });
-    model.push("three_actions_by_two_b".into(), |_, c| {
+    model.push("three_actions_by_two_b".into(), Strong, |_, c| {
         total_runs.borrow_mut().inc(c.name().into());
         Joined
     });
-    model.push("three_actions_by_two_c".into(), |s, c| {
+    model.push("three_actions_by_two_c".into(), Strong, |s, c| {
         total_runs.borrow_mut().inc(c.name().into());
         match s.inc(c.name().into()) {
             2 => Joined,
@@ -155,7 +155,7 @@ fn three_actions_by_two() {
 fn one_shot_deadlock() {
     let run_count = Cell::new(0);
     let mut model = Model::new(Counter::new);
-    model.push("one_shot_deadlock".into(), |_, _| {
+    model.push("one_shot_deadlock".into(), Strong, |_, _| {
         run_count.set(run_count.get() + 1);
         ActionResult::Blocked
     });
@@ -170,7 +170,7 @@ fn two_actions_no_deadlock() {
     let mut model = Model::new(Lock::new);
     for c in ["a", "b"] {
         model.push(String::from("two_actions_no_deadlock_".to_owned() + c),
-                   |s, c| {
+                   Strong, |s, c| {
             if s.held(c.name()) {
                 s.unlock();
                 Joined
@@ -189,7 +189,7 @@ fn two_actions_no_deadlock() {
 #[test]
 fn two_actions_deadlock() {
     let mut model = Model::new(|| vec![Lock::new(), Lock::new()]);
-    model.push("two_actions_deadlock_a".into(), |s, c| {
+    model.push("two_actions_deadlock_a".into(), Strong, |s, c| {
         if s[0].held(c.name()) {
             if s[1].held(c.name()) {
                 s[1].unlock();
@@ -206,7 +206,7 @@ fn two_actions_deadlock() {
             Blocked
         }
     });
-    model.push("two_actions_deadlock_b".into(), |s, c| {
+    model.push("two_actions_deadlock_b".into(), Strong, |s, c| {
         if s[1].held(c.name()) {
             if s[0].held(c.name()) {
                 s[0].unlock();
