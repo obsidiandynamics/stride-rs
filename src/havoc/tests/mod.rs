@@ -23,9 +23,9 @@ fn one_shot() {
 fn two_shot() {
     let run_count = Cell::new(0);
     let mut model = Model::new(Counter::new);
-    model.push("two_shot".into(), |s, _| {
+    model.push("two_shot".into(), |s, c| {
         run_count.set(run_count.get() + 1);
-        match s.inc("two_shot") {
+        match s.inc(c.name().into()) {
             2 => ActionResult::Joined,
             _ => ActionResult::Ran
         }
@@ -40,12 +40,12 @@ fn two_shot() {
 fn two_actions() {
     let total_runs = RefCell::new(Counter::new());
     let mut model = Model::new(Counter::new);
-    model.push("two_actions_a".into(), |_, _| {
-        total_runs.borrow_mut().inc("two_actions_a");
+    model.push("two_actions_a".into(), |_, c| {
+        total_runs.borrow_mut().inc(c.name().into());
         Joined
     });
-    model.push("two_actions_b".into(), |_, _| {
-        total_runs.borrow_mut().inc("two_actions_b");
+    model.push("two_actions_b".into(), |_, c| {
+        total_runs.borrow_mut().inc(c.name().into());
         Joined
     });
     let checker = Checker::new(&model);
@@ -59,14 +59,14 @@ fn two_actions() {
 fn two_actions_conditional() {
     let total_runs = RefCell::new(Counter::new());
     let mut model = Model::new(Counter::new);
-    model.push("two_actions_conditional_a".into(), |s, _| {
-        total_runs.borrow_mut().inc("two_actions_conditional_a");
-        s.inc("two_actions_conditional_a");
+    model.push("two_actions_conditional_a".into(), |s, c| {
+        total_runs.borrow_mut().inc(c.name().into());
+        s.inc(c.name().into());
         Joined
     });
-    model.push("two_actions_conditional_b".into(), |s, _| {
-        total_runs.borrow_mut().inc("two_actions_conditional_b");
-        if s.inc("two_actions_conditional_b") == 0 && s.get("two_actions_conditional_a") == 0 {
+    model.push("two_actions_conditional_b".into(), |s, c| {
+        total_runs.borrow_mut().inc(c.name().into());
+        if s.inc(c.name().into()) == 0 && s.get("two_actions_conditional_a") == 0 {
             return Ran
         }
         Joined
@@ -82,13 +82,13 @@ fn two_actions_conditional() {
 fn two_actions_by_two() {
     let total_runs = RefCell::new(Counter::new());
     let mut model = Model::new(Counter::new);
-    model.push("two_actions_by_two_0".into(), |_, _| {
-        total_runs.borrow_mut().inc("two_actions_by_two_0");
+    model.push("two_actions_by_two_0".into(), |_, c| {
+        total_runs.borrow_mut().inc(c.name().into());
         Joined
     });
-    model.push("two_actions_by_two_1".into(), |s, _| {
-        total_runs.borrow_mut().inc("two_actions_by_two_1");
-        match s.inc("two_actions_by_two_1") {
+    model.push("two_actions_by_two_1".into(), |s, c| {
+        total_runs.borrow_mut().inc(c.name().into());
+        match s.inc(c.name().into()) {
             2 => Joined,
             _ => Ran
         }
@@ -104,16 +104,16 @@ fn two_actions_by_two() {
 fn three_actions() {
     let total_runs = RefCell::new(Counter::new());
     let mut model = Model::new(Counter::new);
-    model.push("three_actions_a".into(), |_, _| {
-        total_runs.borrow_mut().inc("three_actions_a");
+    model.push("three_actions_a".into(), |_, c| {
+        total_runs.borrow_mut().inc(c.name().into());
         Joined
     });
-    model.push("three_actions_b".into(), |_, _| {
-        total_runs.borrow_mut().inc("three_actions_b");
+    model.push("three_actions_b".into(), |_, c| {
+        total_runs.borrow_mut().inc(c.name().into());
         Joined
     });
-    model.push("three_actions_c".into(), |_, _| {
-        total_runs.borrow_mut().inc("three_actions_c");
+    model.push("three_actions_c".into(), |_, c| {
+        total_runs.borrow_mut().inc(c.name().into());
         Joined
     });
     let checker = Checker::new(&model);
@@ -128,17 +128,17 @@ fn three_actions() {
 fn three_actions_by_two() {
     let total_runs = RefCell::new(Counter::new());
     let mut model = Model::new(Counter::new);
-    model.push("three_actions_by_two_a".into(), |_, _| {
-        total_runs.borrow_mut().inc("three_actions_by_two_a");
+    model.push("three_actions_by_two_a".into(), |_, c| {
+        total_runs.borrow_mut().inc(c.name().into());
         Joined
     });
-    model.push("three_actions_by_two_b".into(), |_, _| {
-        total_runs.borrow_mut().inc("three_actions_by_two_b");
+    model.push("three_actions_by_two_b".into(), |_, c| {
+        total_runs.borrow_mut().inc(c.name().into());
         Joined
     });
-    model.push("three_actions_by_two_c".into(), |s, _| {
-        total_runs.borrow_mut().inc("three_actions_by_two_c");
-        match s.inc("three_actions_by_two_c") {
+    model.push("three_actions_by_two_c".into(), |s, c| {
+        total_runs.borrow_mut().inc(c.name().into());
+        match s.inc(c.name().into()) {
             2 => Joined,
             _ => Ran
         }
