@@ -9,6 +9,8 @@ use stride::havoc::*;
 use stride::*;
 use uuid::Uuid;
 use Retention::Strong;
+use std::borrow::Borrow;
+use stride::Message::Decision;
 
 struct State {
     candidates_broker: Broker<CandidateMessage<Statemap>>,
@@ -55,7 +57,7 @@ impl State {
 }
 
 #[test]
-fn one() {
+fn swaps_one() {
     let mut model = Model::new(|| State::new(1, vec![5, 7]));
     const COMBOS: [(usize, usize); 1] = [(0, 1)];
 
@@ -71,9 +73,8 @@ fn one() {
                 let cpt_snapshot = cohort.replica.ver;
                 let statemap = Statemap::new(vec![(p, old_q.0), (q, old_p.0)]);
                 cohort.candidates.produce(Rc::new(CandidateMessage {
-                    transaction: Candidate {
+                    rec: Record {
                         xid: uuidify(cohort_index, 0),
-                        ver: 0,
                         readset: itemset.clone(),
                         writeset: itemset.clone(),
                         readvers: cpt_readvers,
@@ -93,7 +94,13 @@ fn one() {
                 match cohort.decisions.consume() {
                     None => Blocked,
                     Some((_, decision)) => {
-                        cohort.replica.install_ser(&decision.statemap, decision.transaction.ver);
+                        match decision.outcome {
+                            Outcome::Commit(_, _) => {
+                                let statemap = decision.statemap.as_ref().expect("no statemap in commit");
+                                cohort.replica.install_ser(statemap, decision.candidate.ver);
+                            }
+                            Outcome::Abort(_, _) => {}
+                        }
                         Ran
                     }
                 }
@@ -107,8 +114,21 @@ fn one() {
             let certifier = &mut s.certifier;
             match certifier.candidates.consume() {
                 None => Blocked,
-                Some(candidate) => {
-
+                Some((offset, candidate_message)) => {
+                    let candidate = Candidate {
+                        rec: candidate_message.rec.clone(),
+                        ver: offset as u64
+                    };
+                    let outcome = certifier.examiner.assess(&candidate);
+                    let statemap = match outcome {
+                        Outcome::Commit(_, _) => Some(candidate_message.statemap.clone()),
+                        Outcome::Abort(_, _) => None
+                    };
+                    certifier.decisions.produce(Rc::new(DecisionMessage {
+                        candidate,
+                        outcome,
+                        statemap
+                    }));
                     Ran
                 }
             }

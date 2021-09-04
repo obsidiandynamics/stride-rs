@@ -1,7 +1,7 @@
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
 use uuid::Uuid;
 
-use stride::{Candidate, Examiner, Discord};
+use stride::{Record, Examiner, Discord};
 use stride::Outcome::Commit;
 
 fn criterion_benchmark(c: &mut Criterion) {
@@ -39,7 +39,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         let mut examiner = Examiner::new();
         let mut i = 1;
         b.iter_batched(|| {
-            let candidate = Candidate {
+            let candidate = Record {
                 xid: Uuid::from_u128(i as u128),
                 ver: i,
                 readset: vec!["x".into()],

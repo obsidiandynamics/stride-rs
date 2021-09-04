@@ -146,14 +146,14 @@ impl<'a, S> Checker<'a, S> {
     pub fn check(mut self) -> CheckResult {
         self.reset_live();
 
-        let mut i = 0;
+        // let mut i = 0;
         let mut state = (*self.model.setup)();
         loop {
-            i += 1;
-            if i > 70 {
-                println!("TOO MANY RUNS");
-                return CheckResult::Flawed
-            }
+            // i += 1;
+            // if i > 70 {
+            //     println!("TOO MANY RUNS");
+            //     return CheckResult::Flawed
+            // }
 
             if self.depth == self.stack.len() {
                 print!("pushing...");

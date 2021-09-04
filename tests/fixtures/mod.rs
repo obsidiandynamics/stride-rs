@@ -4,6 +4,7 @@ use std::rc::Rc;
 use stride::{CandidateMessage, DecisionMessage, Examiner, Message};
 use uuid::Uuid;
 
+#[derive(Debug, Clone)]
 pub struct Statemap {
     changes: Vec<(usize, i32)>,
 }
@@ -14,6 +15,7 @@ impl Statemap {
     }
 }
 
+#[derive(Debug)]
 pub struct Cohort {
     pub pending: Vec<Uuid>,
     pub replica: Replica,
@@ -21,12 +23,14 @@ pub struct Cohort {
     pub decisions: Stream<DecisionMessage<Statemap>>,
 }
 
+#[derive(Debug)]
 pub struct Certifier {
     pub examiner: Examiner,
     pub candidates: Stream<CandidateMessage<Statemap>>,
     pub decisions: Stream<DecisionMessage<Statemap>>,
 }
 
+#[derive(Debug)]
 pub struct Replica {
     pub items: Vec<(i32, u64)>,
     pub ver: u64,
@@ -63,10 +67,12 @@ impl Replica {
     }
 }
 
+#[derive(Debug)]
 pub struct Broker<M> {
     internals: Rc<RefCell<BrokerInternals<M>>>
 }
 
+#[derive(Debug)]
 struct BrokerInternals<M> {
     messages: Vec<Rc<M>>,
     base: usize,
@@ -89,6 +95,7 @@ impl<M> Broker<M> {
     }
 }
 
+#[derive(Debug)]
 pub struct Stream<M> {
     internals: Rc<RefCell<BrokerInternals<M>>>,
     offset: usize,
