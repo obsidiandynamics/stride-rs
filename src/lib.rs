@@ -6,7 +6,6 @@ use std::collections::hash_map::Entry;
 use uuid::Uuid;
 use crate::AbortReason::{Staleness, Antidependency};
 use rustc_hash::FxHashMap;
-use std::any::Any;
 
 //TODO this doesn't need to be part of the examiner
 pub enum Message<S> {
