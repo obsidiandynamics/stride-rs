@@ -181,14 +181,14 @@ impl<'a, S> Checker<'a, S> {
                 println!("  skipping {} due to block", top.index);
 
                 if top.index + 1 == self.model.actions.len() {
-                    // panic!("    exhausted");
-                    println!("    abandoning");
-                    match self.unwind() {
-                        None => return Flawless,
-                        Some(s) => state = s
-                    }
-                    self.blocked.clear();
-                    continue
+                    panic!("    abandoning");
+                    // println!("    abandoning");
+                    // match self.unwind() {
+                    //     None => return Flawless,
+                    //     Some(s) => state = s
+                    // }
+                    // self.blocked.clear();
+                    // continue
                 } else {
                     let top = &mut self.stack[self.depth];
                     top.index += 1;

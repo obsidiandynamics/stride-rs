@@ -20,8 +20,8 @@ struct State {
 
 impl State {
     fn new(num_cohorts: usize, values: Vec<i32>) -> Self {
-        let candidates_broker = Broker::new();
-        let decisions_broker = Broker::new();
+        let candidates_broker = Broker::new(1);
+        let decisions_broker = Broker::new(1);
         let cohorts = (0..num_cohorts)
             .into_iter()
             .map(|i| Cohort {
@@ -92,7 +92,7 @@ fn one() {
                 let cohort = &mut s.cohorts[cohort_index];
                 match cohort.decisions.consume() {
                     None => Blocked,
-                    Some(decision) => {
+                    Some((_, decision)) => {
                         cohort.replica.install_ser(&decision.statemap, decision.transaction.ver);
                         Ran
                     }
