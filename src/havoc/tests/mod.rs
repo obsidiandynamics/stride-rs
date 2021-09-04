@@ -5,6 +5,7 @@ use crate::havoc::ActionResult::*;
 use std::cell::{Cell, RefCell};
 use crate::havoc::tests::common::{Counter, Lock};
 use crate::havoc::Retention::Weak;
+use rand::Rng;
 
 #[test]
 fn one_shot() {
@@ -251,4 +252,25 @@ fn two_actions_one_weak() {
     assert_eq!(3, total_runs.borrow().get("two_actions_one_weak_a"));
     assert_eq!(3, total_runs.borrow().get("two_actions_one_weak_b"));
     assert_eq!(CheckResult::Flawless, result);
+}
+
+#[test]
+fn rand() {
+    let generated = RefCell::new(FxHashSet::default());
+    let mut model = Model::new(Counter::new);
+    const NUMS: i64 = 3;
+    model.push("rand".into(), Strong, |s, c| {
+        let random_number = c.rng().gen::<i64>();
+        generated.borrow_mut().insert(random_number);
+        match s.inc(c.name().into()) {
+            NUMS => Joined,
+            _ => Ran
+        }
+    });
+    assert_eq!(CheckResult::Flawless,  Checker::new(&model).check());
+    assert_eq!(NUMS, generated.borrow().len() as i64);
+
+    // repeat run should yield the same random numbers
+    assert_eq!(CheckResult::Flawless,  Checker::new(&model).check());
+    assert_eq!(NUMS, generated.borrow().len() as i64);
 }

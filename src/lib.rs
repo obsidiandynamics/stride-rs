@@ -1,4 +1,4 @@
-mod havoc;
+pub mod havoc;
 
 use crate::Outcome::{Abort, Commit};
 use crate::Discord::{Assertive, Permissive};

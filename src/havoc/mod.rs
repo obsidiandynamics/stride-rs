@@ -1,6 +1,9 @@
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashSet};
 use crate::havoc::CheckResult::{Flawless, Deadlocked};
 use crate::havoc::Retention::Strong;
+use std::hash::{Hasher};
+use rand::rngs::StdRng;
+use rand::SeedableRng;
 
 pub struct Model<'a, S> {
     setup: Box<dyn Fn() -> S + 'a>,
@@ -22,7 +25,7 @@ pub enum Retention {
 struct ActionEntry<'a, S> {
     name: String,
     retention: Retention,
-    action: Box<dyn Fn(&mut S, &Context) -> ActionResult + 'a>,
+    action: Box<dyn Fn(&mut S, &Context<S>) -> ActionResult + 'a>,
 }
 
 impl<'a, S> Model<'a, S> {
@@ -32,7 +35,7 @@ impl<'a, S> Model<'a, S> {
     }
 
     pub fn push<F>(&mut self, name: String, retention: Retention, action: F)
-        where F: Fn(&mut S, &Context) -> ActionResult + 'a {
+        where F: Fn(&mut S, &Context<S>) -> ActionResult + 'a {
         self.actions.push(ActionEntry { name, retention, action: Box::new(action) });
     }
 }
@@ -59,13 +62,20 @@ pub enum CheckResult {
     Deadlocked
 }
 
-pub struct Context<'a> {
-    name: &'a str
+pub struct Context<'a, S> {
+    name: &'a str,
+    checker: &'a Checker<'a, S>
 }
 
-impl Context<'_> {
+impl<S> Context<'_, S> {
     pub fn name(&self) -> &str {
         self.name
+    }
+
+    pub fn rng(&self) -> StdRng {
+        // let r = rand::thread_rng();
+        let rng = rand::rngs::StdRng::seed_from_u64(self.checker.hash());
+        rng
     }
 }
 
@@ -83,6 +93,19 @@ impl<'a, S> Checker<'a, S> {
         self.depth = 0;
         self.strong_count = self.model.actions
             .iter().filter(|entry| entry.retention == Strong).count();
+    }
+
+    fn hash(&self) -> u64 {
+        // let mut hasher = FxHasher::default();
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        // println!("depth {}", self.depth);
+        hasher.write_usize(0x517cc1b727220a95); // K from FxHasher
+        for i in 0..=self.depth {
+            hasher.write_usize(self.stack[i].index);
+        }
+        let hash = hasher.finish();
+        // println!("hash {}", hash);
+        hash
     }
 
     fn unwind(&mut self) -> Option<S> {
@@ -144,7 +167,7 @@ impl<'a, S> Checker<'a, S> {
             let top = &self.stack[self.depth];
             let action_entry = &self.model.actions[top.index];
             println!("  running {}", action_entry.name);
-            let context = Context { name: &action_entry.name };
+            let context = Context { name: &action_entry.name, checker: &self };
             let result = (*action_entry.action)(&mut state, &context);
 
             match result {

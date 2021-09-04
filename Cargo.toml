@@ -8,7 +8,7 @@ edition = "2018"
 [dependencies]
 #str-macro = "1.0.0"
 uuid = "0.8"
-#hashers = "1.0"
+rand = "0.8"
 rustc-hash = "1.1"
 
 [dev-dependencies]
