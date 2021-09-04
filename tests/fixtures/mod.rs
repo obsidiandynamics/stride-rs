@@ -64,7 +64,12 @@ impl Replica {
 }
 
 pub struct Broker<M> {
-    messages: Rc<RefCell<Vec<Rc<M>>>>
+    messages: Rc<RefCell<Vec<Rc<M>>>>,
+}
+
+struct BrokerState<M> {
+    messages: Vec<Rc<M>>,
+    base: usize
 }
 
 impl<M> Broker<M> {
@@ -106,6 +111,10 @@ impl<M> Stream<M> {
             .map(|i| Rc::clone(&i))
             .collect()
     }
+}
+
+pub fn uuidify(pid: usize, run: usize) -> Uuid {
+    Uuid::from_u128((pid as u128) << 64 | run as u128)
 }
 
 #[test]
@@ -190,4 +199,11 @@ fn stream_produce_consume() {
     assert_eq!(Some(Rc::new("second")), s1.consume());
     assert_eq!(Some(Rc::new("third")), s1.consume());
     assert_eq!(None, s1.consume());
+}
+
+#[test]
+fn uuidify_test() {
+    assert_eq!("00000000-0000-0000-0000-000000000000", &uuidify(0, 0).to_string());
+    assert_eq!("00000000-0000-0000-0000-000000000001", &uuidify(0, 1).to_string());
+    assert_eq!("00000000-0000-0001-0000-000000000000", &uuidify(1, 0).to_string());
 }
