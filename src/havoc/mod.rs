@@ -45,6 +45,7 @@ pub struct Checker<'a, S> {
     stack: Vec<Frame>,
     depth: usize,
     live: FxHashSet<usize>, // indexes of live actions
+    blocked: FxHashSet<usize>,
     strong_count: usize
 }
 
@@ -52,7 +53,6 @@ pub struct Checker<'a, S> {
 struct Frame {
     index: usize,
     live_snapshot: FxHashSet<usize>,
-    blocked: usize
 }
 
 #[derive(PartialEq, Debug)]
@@ -81,7 +81,14 @@ impl<S> Context<'_, S> {
 
 impl<'a, S> Checker<'a, S> {
     pub fn new(model: &'a Model<'a, S>) -> Self {
-        Checker { model, stack: vec![], depth: 0, live: FxHashSet::default(), strong_count: 0 }
+        Checker {
+            model,
+            stack: vec![],
+            depth: 0,
+            live: FxHashSet::default(),
+            strong_count: 0,
+            blocked: FxHashSet::default()
+        }
     }
 
     fn reset_live(&mut self) {
@@ -148,7 +155,7 @@ impl<'a, S> Checker<'a, S> {
 
             if self.depth == self.stack.len() {
                 print!("pushing...");
-                self.stack.push(Frame { index: 0, live_snapshot: self.live.clone(), blocked: 0 });
+                self.stack.push(Frame { index: 0, live_snapshot: self.live.clone() });
             }
             println!("depth: {}, stack {:?}", self.depth, self.stack);
             let top = &self.stack[self.depth];
@@ -157,6 +164,25 @@ impl<'a, S> Checker<'a, S> {
 
                 if top.index + 1 == self.model.actions.len() {
                     panic!("    exhausted");
+                } else {
+                    let top = &mut self.stack[self.depth];
+                    top.index += 1;
+                    continue
+                }
+            }
+
+            if self.blocked.contains(&top.index) {
+                println!("  skipping {} due to block", top.index);
+
+                if top.index + 1 == self.model.actions.len() {
+                    // panic!("    exhausted");
+                    println!("    abandoning");
+                    match self.unwind() {
+                        None => return Flawless,
+                        Some(s) => state = s
+                    }
+                    self.blocked.clear();
+                    continue
                 } else {
                     let top = &mut self.stack[self.depth];
                     top.index += 1;
@@ -174,26 +200,43 @@ impl<'a, S> Checker<'a, S> {
                 ActionResult::Ran => {
                     println!("    ran");
                     self.depth += 1;
+                    self.blocked.clear();
                 }
                 ActionResult::Blocked => {
                     println!("    blocked");
-                    let mut top = &mut self.stack[self.depth];
-                    top.blocked += 1;
+                    self.blocked.insert(top.index);
+                    // let mut top = &mut self.stack[self.depth];
+                    // top.blocked += 1;
 
-                    if top.index + 1 == self.model.actions.len() {
-                        if top.blocked == self.live.len() {
-                            println!("      deadlocked");
-                            return Deadlocked
-                        } else {
-                            println!("      abandoning");
-                            match self.unwind() {
-                                None => return Flawless,
-                                Some(s) => state = s
-                            }
-                        }
+                    if self.blocked.len() == self.live.len() {
+                        println!("      deadlocked");
+                        return Deadlocked
                     } else {
-                        top.index += 1;
+                        // println!("      abandoning");
+                        // match self.unwind() {
+                        //     None => return Flawless,
+                        //     Some(s) => state = s
+                        // }
+                        self.depth += 1;
                     }
+
+                    // if top.index + 1 == self.model.actions.len() {
+                    //     if self.blocked.len() == self.live.len() {
+                    //         println!("      deadlocked");
+                    //         return Deadlocked
+                    //     } else {
+                    //         // println!("      abandoning");
+                    //         // match self.unwind() {
+                    //         //     None => return Flawless,
+                    //         //     Some(s) => state = s
+                    //         // }
+                    //         println!("      diving");
+                    //         top.blocked = 0;
+                    //         self.depth += 1;
+                    //     }
+                    // } else {
+                    //     top.index += 1;
+                    // }
                     continue
                 }
                 ActionResult::Joined => {
@@ -212,6 +255,7 @@ impl<'a, S> Checker<'a, S> {
                     } else {
                         self.depth += 1;
                     }
+                    self.blocked.clear();
                 }
                 ActionResult::Panicked => {}
             }

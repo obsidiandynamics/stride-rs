@@ -231,7 +231,28 @@ fn two_actions_deadlock() {
 }
 
 #[test]
-fn two_actions_one_weak() {
+fn two_actions_one_weak_blocked() {
+    let total_runs = RefCell::new(Counter::new());
+    let mut model = Model::new(Counter::new);
+    model.push("two_actions_one_weak_a".into(), Strong, |s, c| {
+        total_runs.borrow_mut().inc(c.name().into());
+        s.inc(c.name().into());
+        Joined
+    });
+    model.push("two_actions_one_weak_b".into(), Weak, |s, c| {
+        assert_eq!(0, s.get("two_actions_one_weak_a"), "b should not run after a's join");
+        total_runs.borrow_mut().inc(c.name().into());
+        Blocked
+    });
+    let checker = Checker::new(&model);
+    let result = checker.check();
+    assert_eq!(3, total_runs.borrow().get("two_actions_one_weak_a"));
+    assert_eq!(3, total_runs.borrow().get("two_actions_one_weak_b"));
+    assert_eq!(CheckResult::Flawless, result);
+}
+
+#[test]
+fn two_actions_one_weak_two_runs() {
     let total_runs = RefCell::new(Counter::new());
     let mut model = Model::new(Counter::new);
     model.push("two_actions_one_weak_a".into(), Strong, |s, c| {
