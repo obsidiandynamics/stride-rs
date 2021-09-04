@@ -8,9 +8,23 @@ use crate::AbortReason::{Staleness, Antidependency};
 use rustc_hash::FxHashMap;
 
 //TODO this doesn't need to be part of the examiner
+#[derive(Debug)]
 pub enum Message<S> {
-    Candidate(Candidate, S),
-    Decision(Candidate, Outcome, S)
+    Candidate(CandidateMessage<S>),
+    Decision(DecisionMessage<S>)
+}
+
+#[derive(Debug)]
+pub struct CandidateMessage<S> {
+    pub transaction: Candidate,
+    pub statemap: S
+}
+
+#[derive(Debug)]
+pub struct DecisionMessage<S> {
+    pub transaction: Candidate,
+    pub outcome: Outcome,
+    pub statemap: S
 }
 
 #[derive(Debug)]

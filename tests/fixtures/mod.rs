@@ -2,14 +2,14 @@ use uuid::Uuid;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::ops::Deref;
-use stride::{Message, Examiner};
+use stride::{Message, Examiner, CandidateMessage, DecisionMessage};
 
 pub struct Statemap {
     changes: Vec<(usize, i32)>
 }
 
 impl Statemap {
-    fn new(changes: Vec<(usize, i32)>) -> Self {
+    pub fn new(changes: Vec<(usize, i32)>) -> Self {
         Statemap { changes }
     }
 }
@@ -17,14 +17,14 @@ impl Statemap {
 pub struct Cohort {
     pub pending: Vec<Uuid>,
     pub replica: Replica,
-    pub candidates: Stream<Message<Statemap>>,
-    pub decisions: Stream<Message<Statemap>>
+    pub candidates: Stream<CandidateMessage<Statemap>>,
+    pub decisions: Stream<DecisionMessage<Statemap>>
 }
 
 pub struct Certifier {
     pub examiner: Examiner,
-    pub candidates: Stream<Message<Statemap>>,
-    pub decisions: Stream<Message<Statemap>>
+    pub candidates: Stream<CandidateMessage<Statemap>>,
+    pub decisions: Stream<DecisionMessage<Statemap>>
 }
 
 pub struct Replica {
