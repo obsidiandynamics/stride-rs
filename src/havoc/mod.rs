@@ -53,6 +53,7 @@ pub struct Checker<'a, S> {
 struct Frame {
     index: usize,
     live_snapshot: FxHashSet<usize>,
+    blocked_snapshot: FxHashSet<usize>,
 }
 
 #[derive(PartialEq, Debug)]
@@ -120,7 +121,8 @@ impl<'a, S> Checker<'a, S> {
             let mut top = &mut self.stack[self.depth];
             loop {
                 top.index += 1;
-                if top.index == self.model.actions.len() || top.live_snapshot.contains(&top.index) {
+                if top.index == self.model.actions.len() ||
+                    top.live_snapshot.contains(&top.index) && !top.blocked_snapshot.contains(&top.index) {
                     break;
                 }
             }
@@ -155,7 +157,11 @@ impl<'a, S> Checker<'a, S> {
 
             if self.depth == self.stack.len() {
                 print!("pushing...");
-                self.stack.push(Frame { index: 0, live_snapshot: self.live.clone() });
+                self.stack.push(Frame {
+                    index: 0,
+                    live_snapshot: self.live.clone(),
+                    blocked_snapshot: self.blocked.clone()
+                });
             }
             println!("depth: {}, stack {:?}", self.depth, self.stack);
             let top = &self.stack[self.depth];

@@ -246,8 +246,8 @@ fn two_actions_one_weak_blocked() {
     });
     let checker = Checker::new(&model);
     let result = checker.check();
-    assert_eq!(3, total_runs.borrow().get("two_actions_one_weak_a"));
-    assert_eq!(3, total_runs.borrow().get("two_actions_one_weak_b"));
+    assert_eq!(2, total_runs.borrow().get("two_actions_one_weak_a"));
+    assert_eq!(1, total_runs.borrow().get("two_actions_one_weak_b"));
     assert_eq!(CheckResult::Flawless, result);
 }
 
