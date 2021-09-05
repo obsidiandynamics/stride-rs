@@ -57,6 +57,7 @@ impl<'a, S> Model<'a, S> {
 
 pub struct Checker<'a, S> {
     config: Config,
+    // initials: Initials,
     model: &'a Model<'a, S>,
     stack: Vec<Frame>,
     depth: usize,
@@ -95,7 +96,7 @@ impl<S> Context<'_, S> {
 }
 
 struct Initials {
-    live: FxHashSet<usize>,
+    // live: FxHashSet<usize>,
     strong_count: usize,
 }
 
@@ -167,12 +168,16 @@ impl<'a, S> Checker<'a, S> {
     pub fn new(model: &'a Model<'a, S>) -> Self {
         Checker {
             config: Default::default(),
+            // initials: Initials {
+            //     live: Default::default(),
+            //     strong_count: 0
+            // },
             model,
-            stack: vec![],
+            stack: Vec::with_capacity(8),
             depth: 0,
-            live: FxHashSet::default(),
+            live: Default::default(),
             strong_count: 0,
-            blocked: FxHashSet::default(),
+            blocked: Default::default(),
         }
     }
 
@@ -185,17 +190,32 @@ impl<'a, S> Checker<'a, S> {
         self.config = config;
     }
 
+    // fn init(&mut self) {
+        // for i in 0..self.model.actions.len() {
+        //     self.initials.live.insert(i);
+        // }
+        // self.initials.strong_count = self
+        //     .model
+        //     .actions
+        //     .iter()
+        //     .filter(|entry| entry.retention == Strong)
+        //     .count();
+    // }
+
+    #[inline]
     fn reset_run(&mut self) {
         //todo live and strong_count can be cached and cloned
         let trace = self.config.trace.conditional();
         if trace.allows(&Trace::Fine) {
             log::trace!("NEW RUN---------------------");
         }
+        // self.live = self.initials.live.clone();
+        // self.strong_count = self.initials.strong_count;
+        self.depth = 0;
 
         for i in 0..self.model.actions.len() {
             self.live.insert(i);
         }
-        self.depth = 0;
         self.strong_count = self
             .model
             .actions
@@ -254,6 +274,7 @@ impl<'a, S> Checker<'a, S> {
 
     pub fn check(mut self) -> CheckResult {
         let trace = self.config.trace.conditional();
+        // self.init();
         self.reset_run();
 
         // let mut i = 0;

@@ -63,6 +63,7 @@ fn two_actions() {
 
 #[test]
 fn two_actions_conditional() {
+    init_log();
     let total_runs = RefCell::new(Counter::new());
     let mut model = Model::new(Counter::new);
     model.push("two_actions_conditional_a".into(), Strong, |s, c| {
@@ -77,7 +78,7 @@ fn two_actions_conditional() {
         }
         Joined
     });
-    let checker = Checker::new(&model);
+    let checker = Checker::new(&model).with_config(Config::default().with_trace(Trace::Finest));
     let result = checker.check();
     assert_eq!(3, total_runs.borrow().get("two_actions_conditional_a"));
     assert_eq!(5, total_runs.borrow().get("two_actions_conditional_b"));
