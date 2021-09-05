@@ -67,7 +67,6 @@ fn swaps_one() {
 }
 
 #[test]
-#[ignore]
 fn swaps_two() {
     test_swaps(&[(0, 1), (1, 2)], &[3, 5, 7], name_of(&swaps_two));
 }
@@ -117,6 +116,7 @@ fn test_swaps(combos: &[(usize, usize)], values: &[i32], name: &str) {
                                 let statemap =
                                     decision.statemap.as_ref().expect("no statemap in commit");
                                 cohort.replica.install_ser(statemap, decision.candidate.ver);
+                                //TODO assert
                             }
                             Outcome::Abort(reason, _) => {
                                 log::trace!("ABORTED {:?}", reason);
@@ -140,7 +140,7 @@ fn test_swaps(combos: &[(usize, usize)], values: &[i32], name: &str) {
                     ver: offset as u64,
                 };
                 let outcome = certifier.examiner.assess(&candidate);
-                log::trace!("OUTCOME {:?}", outcome);
+                // log::trace!("OUTCOME {:?}", outcome);
                 let statemap = match outcome {
                     Outcome::Commit(_, _) => Some(candidate_message.statemap.clone()),
                     Outcome::Abort(_, _) => None,

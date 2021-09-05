@@ -95,7 +95,6 @@ struct Frame {
     index: usize,
     live_snapshot: FxHashSet<usize>,
     blocked_snapshot: FxHashSet<usize>,
-    blocked: bool
 }
 
 #[derive(PartialEq, Debug)]
@@ -127,7 +126,8 @@ struct Initials {
 
 #[derive(Debug)]
 pub struct Stats {
-    schedules: usize, // how many discrete runs were performed
+    executed: usize,  // how many schedules were executed
+    completed: usize, // how many schedules ran to completion
     deepest: usize,   // the deepest traversal (number of stack elements)
     steps: usize,     // total number of steps undertaken (number of actions executed)
 }
@@ -204,7 +204,8 @@ impl<'a, S> Checker<'a, S> {
             //     strong_count: 0
             // },
             stats: Stats {
-                schedules: 0,
+                executed: 0,
+                completed: 0,
                 deepest: 0,
                 steps: 0,
             },
@@ -242,12 +243,12 @@ impl<'a, S> Checker<'a, S> {
     fn reset_run(&mut self) {
         let trace = self.config.trace.conditional();
         if trace.allows(Trace::Fine) {
-            log::trace!("new schedule {}", self.stats.schedules);
+            log::trace!("new schedule {}", self.stats.executed);
         }
         // self.live = self.initials.live.clone();
         // self.strong_count = self.initials.strong_count;
-        self.stats.schedules += 1;
-        if self.stats.schedules % 100000 == 0 {
+        self.stats.executed += 1;
+        if self.stats.executed % 100000 == 0 {
             let num_actions = self.model.actions.len();
             let (mut sum, mut frac, divisor) = (0f64, 1f64, num_actions as f64);
             log::debug!("stack: {:?}", self.stack);
@@ -297,7 +298,6 @@ impl<'a, S> Checker<'a, S> {
             let top = &mut self.stack[self.depth];
             loop {
                 top.index += 1;
-                top.blocked = false;
                 if top.index == self.model.actions.len()
                     || top.live_snapshot.contains(&top.index)
                         && !top.blocked_snapshot.contains(&top.index)
@@ -356,18 +356,10 @@ impl<'a, S> Checker<'a, S> {
                     index: 0,
                     live_snapshot: self.live.clone(),
                     blocked_snapshot: self.blocked.clone(),
-                    blocked: false
                 });
             }
 
             let top = &self.stack[self.depth];
-            if top.blocked {
-                // log::trace!("SKIPPING {} {}", self.depth, &self.model.actions[top.index].name);
-                self.depth += 1;
-                self.blocked.insert(top.index);
-                continue;
-            }
-
             if trace.allows(Trace::Finest) {
                 log::trace!("depth: {}, stack {:?}", self.depth, self.stack);
             }
@@ -430,10 +422,8 @@ impl<'a, S> Checker<'a, S> {
                         log::trace!("    blocked");
                     }
                     let top = &mut self.stack[self.depth];
-                    top.blocked = true;
                     self.blocked.insert(top.index);
                     // let mut top = &mut self.stack[self.depth];
-                    // top.blocked += 1;
 
                     if self.blocked.len() == self.live.len() {
                         self.capture_stats();
@@ -442,7 +432,25 @@ impl<'a, S> Checker<'a, S> {
                         }
                         return Deadlocked;
                     } else {
-                        self.depth += 1;
+                        // self.depth += 1;
+
+                        if top.index + 1 == self.model.actions.len() {
+                            if trace.allows(Trace::Finest) {
+                                log::trace!("      abandoned run");
+                            }
+                            match self.unwind() {
+                                None => {
+                                    if trace.allows(Trace::Fine) {
+                                        log::trace!("  passed with {:?} (last run abandoned)", self.stats);
+                                    }
+                                    return Flawless;
+                                }
+                                Some(s) => state = s,
+                            }
+                            self.blocked.clear();
+                        } else {
+                            top.index += 1;
+                        }
                     }
                     continue;
                 }
@@ -459,10 +467,11 @@ impl<'a, S> Checker<'a, S> {
                         if trace.allows(Trace::Finest) {
                             log::trace!("    no more strong actions");
                         }
+                        self.stats.completed += 1;
                         match self.unwind() {
                             None => {
                                 if trace.allows(Trace::Fine) {
-                                    log::trace!("  passed with {:?}", self.stats);
+                                    log::trace!("  passed with {:?} (last strong action joined)", self.stats);
                                 }
                                 return Flawless;
                             }
