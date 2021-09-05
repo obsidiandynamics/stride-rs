@@ -1,25 +1,29 @@
-use rustc_hash::{FxHashSet};
-use crate::havoc::CheckResult::{Flawless, Deadlocked};
+pub mod component;
+
+use crate::havoc::CheckResult::{Deadlocked, Flawless};
 use crate::havoc::Retention::Strong;
-use std::hash::{Hasher};
 use rand::rngs::StdRng;
 use rand::SeedableRng;
+use rustc_hash::FxHashSet;
+use std::hash::Hasher;
+use crate::havoc::Trace::Off;
 
 pub struct Model<'a, S> {
     setup: Box<dyn Fn() -> S + 'a>,
-    actions: Vec<ActionEntry<'a, S>>
+    actions: Vec<ActionEntry<'a, S>>,
 }
 
 pub enum ActionResult {
     Ran,
     Blocked,
     Joined,
-    Panicked
+    Panicked,
 }
 
 #[derive(PartialEq, Debug)]
 pub enum Retention {
-    Strong, Weak
+    Strong,
+    Weak,
 }
 
 struct ActionEntry<'a, S> {
@@ -30,23 +34,35 @@ struct ActionEntry<'a, S> {
 
 impl<'a, S> Model<'a, S> {
     pub fn new<G>(setup: G) -> Self
-        where G: Fn() -> S + 'a {
-        Model { setup: Box::new(setup), actions: vec![] }
+    where
+        G: Fn() -> S + 'a,
+    {
+        Model {
+            setup: Box::new(setup),
+            actions: vec![],
+        }
     }
 
     pub fn push<F>(&mut self, name: String, retention: Retention, action: F)
-        where F: Fn(&mut S, &Context<S>) -> ActionResult + 'a {
-        self.actions.push(ActionEntry { name, retention, action: Box::new(action) });
+    where
+        F: Fn(&mut S, &Context<S>) -> ActionResult + 'a,
+    {
+        self.actions.push(ActionEntry {
+            name,
+            retention,
+            action: Box::new(action),
+        });
     }
 }
 
 pub struct Checker<'a, S> {
+    config: Config,
     model: &'a Model<'a, S>,
     stack: Vec<Frame>,
     depth: usize,
-    live: FxHashSet<usize>, // indexes of live actions
-    blocked: FxHashSet<usize>,
-    strong_count: usize
+    live: FxHashSet<usize>,    // indexes of live (non-joined) actions
+    blocked: FxHashSet<usize>, // indexes of blocked actions
+    strong_count: usize,
 }
 
 #[derive(Debug)]
@@ -60,12 +76,12 @@ struct Frame {
 pub enum CheckResult {
     Flawless,
     Flawed,
-    Deadlocked
+    Deadlocked,
 }
 
 pub struct Context<'a, S> {
     name: &'a str,
-    checker: &'a Checker<'a, S>
+    checker: &'a Checker<'a, S>,
 }
 
 impl<S> Context<'_, S> {
@@ -74,33 +90,118 @@ impl<S> Context<'_, S> {
     }
 
     pub fn rng(&self) -> StdRng {
-        // let r = rand::thread_rng();
-        let rng = rand::rngs::StdRng::seed_from_u64(self.checker.hash());
-        rng
+        rand::rngs::StdRng::seed_from_u64(self.checker.hash())
     }
+}
+
+struct Initials {
+    live: FxHashSet<usize>,
+    strong_count: usize,
+}
+
+#[derive(Debug)]
+pub struct Stats {
+    schedules: usize, // how many discrete runs were performed
+    deepest: usize,   // the deepest traversal (number of stack elements)
+    steps: usize,     // total number of steps undertaken (number of actions executed)
+}
+
+#[derive(Debug)]
+pub struct Config {
+    max_depth: usize,
+    trace: Trace
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Config::default()
+    }
+}
+
+impl Config {
+    pub fn default() -> Self {
+        Config { max_depth: usize::MAX, trace: Trace::Fine }
+    }
+
+    pub fn with_max_depth(mut self, max_depth: usize) -> Self {
+        self.max_depth = max_depth;
+        self
+    }
+
+    pub fn with_trace(mut self, trace: Trace) -> Self {
+        self.trace = trace;
+        self
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
+pub enum Trace {
+    Off, Fine, Finer, Finest
+}
+
+impl Trace {
+    #[inline]
+    fn allows(&self, other: &Trace) -> bool {
+        *self as usize >= *other as usize
+    }
+
+    #[inline]
+    fn conditional(&self) -> Self {
+        match log::log_enabled!(log::Level::Trace) {
+            true => *self,
+            false => Off
+        }
+    }
+}
+
+#[test]
+fn trace_allows() {
+    assert!(!Trace::Off.allows(&Trace::Fine));
+    assert!(Trace::Fine.allows(&Trace::Fine));
+    assert!(!Trace::Fine.allows(&Trace::Finer));
+    assert!(Trace::Finer.allows(&Trace::Finer));
+    assert!(Trace::Finer.allows(&Trace::Fine));
 }
 
 impl<'a, S> Checker<'a, S> {
     pub fn new(model: &'a Model<'a, S>) -> Self {
         Checker {
+            config: Default::default(),
             model,
             stack: vec![],
             depth: 0,
             live: FxHashSet::default(),
             strong_count: 0,
-            blocked: FxHashSet::default()
+            blocked: FxHashSet::default(),
         }
     }
 
-    fn reset_live(&mut self) {
+    pub fn with_config(mut self, config: Config) -> Self {
+        self.config(config);
+        self
+    }
+
+    pub fn config(&mut self, config: Config) {
+        self.config = config;
+    }
+
+    fn reset_run(&mut self) {
         //todo live and strong_count can be cached and cloned
-        println!("NEW RUN---------------------");
+        let trace = self.config.trace.conditional();
+        if trace.allows(&Trace::Fine) {
+            log::trace!("NEW RUN---------------------");
+        }
+
         for i in 0..self.model.actions.len() {
             self.live.insert(i);
         }
         self.depth = 0;
-        self.strong_count = self.model.actions
-            .iter().filter(|entry| entry.retention == Strong).count();
+        self.strong_count = self
+            .model
+            .actions
+            .iter()
+            .filter(|entry| entry.retention == Strong)
+            .count();
     }
 
     fn hash(&self) -> u64 {
@@ -117,34 +218,43 @@ impl<'a, S> Checker<'a, S> {
     }
 
     fn unwind(&mut self) -> Option<S> {
+        let trace = self.config.trace.conditional();
         loop {
             let mut top = &mut self.stack[self.depth];
             loop {
                 top.index += 1;
-                if top.index == self.model.actions.len() ||
-                    top.live_snapshot.contains(&top.index) && !top.blocked_snapshot.contains(&top.index) {
+                if top.index == self.model.actions.len()
+                    || top.live_snapshot.contains(&top.index)
+                    && !top.blocked_snapshot.contains(&top.index)
+                {
                     break;
                 }
             }
-            println!("    top {:?}", top);
+            if trace.allows(&Trace::Finest) {
+                log::trace!("    top {:?}", top);
+            }
             if top.index == self.model.actions.len() {
                 self.stack.remove(self.depth);
-                println!("    popped {}", self.depth);
+                if trace.allows(&Trace::Finest) {
+                    log::trace!("    popped {}", self.depth);
+                }
                 if self.depth > 0 {
                     self.depth -= 1;
                 } else {
-                    return None
+                    return None;
                 }
             } else {
-                break
+                break;
             }
         }
-        self.reset_live();
+        let trace = self.config.trace;
+        self.reset_run();
         Some((*self.model.setup)())
     }
 
     pub fn check(mut self) -> CheckResult {
-        self.reset_live();
+        let trace = self.config.trace.conditional();
+        self.reset_run();
 
         // let mut i = 0;
         let mut state = (*self.model.setup)();
@@ -156,29 +266,38 @@ impl<'a, S> Checker<'a, S> {
             // }
 
             if self.depth == self.stack.len() {
-                print!("pushing...");
+                if trace.allows(&Trace::Finest) {
+                    log::trace!("pushing...");
+                }
                 self.stack.push(Frame {
                     index: 0,
                     live_snapshot: self.live.clone(),
-                    blocked_snapshot: self.blocked.clone()
+                    blocked_snapshot: self.blocked.clone(),
                 });
             }
-            println!("depth: {}, stack {:?}", self.depth, self.stack);
+
+            if trace.allows(&Trace::Finest) {
+                log::trace!("depth: {}, stack {:?}", self.depth, self.stack);
+            }
             let top = &self.stack[self.depth];
             if !self.live.contains(&top.index) {
-                println!("  skipping {} due to join", top.index);
+                if trace.allows(&Trace::Finer) {
+                    log::trace!("  skipping {} due to join", top.index);
+                }
 
                 if top.index + 1 == self.model.actions.len() {
                     panic!("    exhausted");
                 } else {
                     let top = &mut self.stack[self.depth];
                     top.index += 1;
-                    continue
+                    continue;
                 }
             }
 
             if self.blocked.contains(&top.index) {
-                println!("  skipping {} due to block", top.index);
+                if trace.allows(&Trace::Finer) {
+                    log::trace!("  skipping {} due to block", top.index);
+                }
 
                 if top.index + 1 == self.model.actions.len() {
                     panic!("    abandoning");
@@ -192,31 +311,42 @@ impl<'a, S> Checker<'a, S> {
                 } else {
                     let top = &mut self.stack[self.depth];
                     top.index += 1;
-                    continue
+                    continue;
                 }
             }
 
             let top = &self.stack[self.depth];
             let action_entry = &self.model.actions[top.index];
-            println!("  running {}", action_entry.name);
-            let context = Context { name: &action_entry.name, checker: &self };
+            if trace.allows(&Trace::Fine) {
+                log::trace!("  running {}", action_entry.name);
+            }
+            let context = Context {
+                name: &action_entry.name,
+                checker: &self,
+            };
             let result = (*action_entry.action)(&mut state, &context);
 
             match result {
                 ActionResult::Ran => {
-                    println!("    ran");
+                    if trace.allows(&Trace::Fine) {
+                        log::trace!("    ran");
+                    }
                     self.depth += 1;
                     self.blocked.clear();
                 }
                 ActionResult::Blocked => {
-                    println!("    blocked");
+                    if trace.allows(&Trace::Fine) {
+                        log::trace!("    blocked");
+                    }
                     self.blocked.insert(top.index);
                     // let mut top = &mut self.stack[self.depth];
                     // top.blocked += 1;
 
                     if self.blocked.len() == self.live.len() {
-                        println!("      deadlocked");
-                        return Deadlocked
+                        if trace.allows(&Trace::Fine) {
+                            log::trace!("      deadlocked");
+                        }
+                        return Deadlocked;
                     } else {
                         // println!("      abandoning");
                         // match self.unwind() {
@@ -243,20 +373,24 @@ impl<'a, S> Checker<'a, S> {
                     // } else {
                     //     top.index += 1;
                     // }
-                    continue
+                    continue;
                 }
                 ActionResult::Joined => {
-                    println!("    joined");
+                    if trace.allows(&Trace::Fine) {
+                        log::trace!("    joined");
+                    }
                     self.live.remove(&top.index);
                     if self.model.actions[top.index].retention == Strong {
                         self.strong_count -= 1;
                     }
 
                     if self.strong_count == 0 {
-                        println!("    no more strong actions");
+                        if trace.allows(&Trace::Finest) {
+                            log::trace!("    no more strong actions");
+                        }
                         match self.unwind() {
                             None => return Flawless,
-                            Some(s) => state = s
+                            Some(s) => state = s,
                         }
                     } else {
                         self.depth += 1;

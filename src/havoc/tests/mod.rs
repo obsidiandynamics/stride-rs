@@ -1,14 +1,18 @@
-mod common;
-
 use super::*;
+use crate::havoc::component::*;
 use crate::havoc::ActionResult::*;
 use std::cell::{Cell, RefCell};
-use crate::havoc::tests::common::{Counter, Lock};
 use crate::havoc::Retention::Weak;
 use rand::Rng;
 
+fn init_log() {
+    let _ = env_logger::builder()
+        .filter_level(log::LevelFilter::Trace).is_test(true).try_init();
+}
+
 #[test]
 fn one_shot() {
+    init_log();
     let run_count = Cell::new(0);
     let mut model = Model::new(Counter::new);
     model.push("one_shot".into(), Strong, |_, _| {
