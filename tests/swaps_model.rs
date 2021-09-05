@@ -49,9 +49,12 @@ impl State {
         }
     }
 
-    fn assert(&self, replica: &Replica) {
-        let product = replica.items.iter().map(|(item, _)| *item).product();
-        assert_eq!(self.expect_product, product);
+    fn asserter(values: &[i32]) -> impl Fn(&Replica) -> bool {
+        let expected_product: i32 = values.iter().product();
+        move|r| {
+            let computed_product = r.items.iter().map(|(item, _)| *item).product();
+            expected_product == computed_product
+        }
     }
 }
 
@@ -75,6 +78,7 @@ fn test_swaps(combos: &[(usize, usize)], values: &[i32], name: &str) {
     init_log();
     let num_cohorts = combos.len();
     let expect_txns = num_cohorts;
+    let asserter = &State::asserter(values);
     let mut model = Model::new(|| State::new(num_cohorts, Vec::from(values)))
         .with_name(name.into());
 
@@ -116,7 +120,7 @@ fn test_swaps(combos: &[(usize, usize)], values: &[i32], name: &str) {
                                 let statemap =
                                     decision.statemap.as_ref().expect("no statemap in commit");
                                 cohort.replica.install_ser(statemap, decision.candidate.ver);
-                                //TODO assert
+                                assert!(asserter(&cohort.replica));
                             }
                             Outcome::Abort(reason, _) => {
                                 log::trace!("ABORTED {:?}", reason);
