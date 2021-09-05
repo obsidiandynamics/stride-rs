@@ -95,6 +95,7 @@ struct Frame {
     index: usize,
     live_snapshot: FxHashSet<usize>,
     blocked_snapshot: FxHashSet<usize>,
+    blocked: bool
 }
 
 #[derive(PartialEq, Debug)]
@@ -293,9 +294,10 @@ impl<'a, S> Checker<'a, S> {
         self.capture_stats();
 
         loop {
-            let mut top = &mut self.stack[self.depth];
+            let top = &mut self.stack[self.depth];
             loop {
                 top.index += 1;
+                top.blocked = false;
                 if top.index == self.model.actions.len()
                     || top.live_snapshot.contains(&top.index)
                         && !top.blocked_snapshot.contains(&top.index)
@@ -354,13 +356,21 @@ impl<'a, S> Checker<'a, S> {
                     index: 0,
                     live_snapshot: self.live.clone(),
                     blocked_snapshot: self.blocked.clone(),
+                    blocked: false
                 });
+            }
+
+            let top = &self.stack[self.depth];
+            if top.blocked {
+                // log::trace!("SKIPPING {} {}", self.depth, &self.model.actions[top.index].name);
+                self.depth += 1;
+                self.blocked.insert(top.index);
+                continue;
             }
 
             if trace.allows(Trace::Finest) {
                 log::trace!("depth: {}, stack {:?}", self.depth, self.stack);
             }
-            let top = &self.stack[self.depth];
             if !self.live.contains(&top.index) {
                 if trace.allows(Trace::Finer) {
                     log::trace!("  skipping {} due to join", top.index);
@@ -419,6 +429,8 @@ impl<'a, S> Checker<'a, S> {
                     if trace.allows(Trace::Fine) {
                         log::trace!("    blocked");
                     }
+                    let top = &mut self.stack[self.depth];
+                    top.blocked = true;
                     self.blocked.insert(top.index);
                     // let mut top = &mut self.stack[self.depth];
                     // top.blocked += 1;
