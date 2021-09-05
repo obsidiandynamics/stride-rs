@@ -2,15 +2,16 @@ pub mod component;
 
 use crate::havoc::CheckResult::{Deadlocked, Flawless};
 use crate::havoc::Retention::Strong;
+use crate::havoc::Trace::Off;
 use rand::rngs::StdRng;
 use rand::SeedableRng;
 use rustc_hash::FxHashSet;
 use std::hash::Hasher;
-use crate::havoc::Trace::Off;
 
 pub struct Model<'a, S> {
     setup: Box<dyn Fn() -> S + 'a>,
     actions: Vec<ActionEntry<'a, S>>,
+    name: Option<String>
 }
 
 pub enum ActionResult {
@@ -32,6 +33,10 @@ struct ActionEntry<'a, S> {
     action: Box<dyn Fn(&mut S, &Context<S>) -> ActionResult + 'a>,
 }
 
+pub fn name_of<T>(_: &T) -> &'static str {
+    std::any::type_name::<T>()
+}
+
 impl<'a, S> Model<'a, S> {
     pub fn new<G>(setup: G) -> Self
     where
@@ -40,10 +45,11 @@ impl<'a, S> Model<'a, S> {
         Model {
             setup: Box::new(setup),
             actions: vec![],
+            name: Option::None
         }
     }
 
-    pub fn push<F>(&mut self, name: String, retention: Retention, action: F)
+    pub fn action<F>(&mut self, name: String, retention: Retention, action: F)
     where
         F: Fn(&mut S, &Context<S>) -> ActionResult + 'a,
     {
@@ -53,10 +59,28 @@ impl<'a, S> Model<'a, S> {
             action: Box::new(action),
         });
     }
+
+    pub fn with_action<F>(mut self, name: String, retention: Retention, action: F) -> Self
+    where
+        F: Fn(&mut S, &Context<S>) -> ActionResult + 'a,
+    {
+        self.action(name, retention, action);
+        self
+    }
+
+    pub fn name(&mut self, name: String) {
+        self.name = Some(name);
+    }
+
+    pub fn with_name(mut self, name: String) -> Self {
+        self.name(name);
+        self
+    }
 }
 
 pub struct Checker<'a, S> {
     config: Config,
+    stats: Stats,
     // initials: Initials,
     model: &'a Model<'a, S>,
     stack: Vec<Frame>,
@@ -110,7 +134,7 @@ pub struct Stats {
 #[derive(Debug)]
 pub struct Config {
     max_depth: usize,
-    trace: Trace
+    trace: Trace,
 }
 
 impl Default for Config {
@@ -121,7 +145,10 @@ impl Default for Config {
 
 impl Config {
     pub fn default() -> Self {
-        Config { max_depth: usize::MAX, trace: Trace::Fine }
+        Config {
+            max_depth: usize::MAX,
+            trace: Trace::Fine,
+        }
     }
 
     pub fn with_max_depth(mut self, max_depth: usize) -> Self {
@@ -137,31 +164,34 @@ impl Config {
 
 #[derive(Copy, Clone, Debug)]
 pub enum Trace {
-    Off, Fine, Finer, Finest
+    Off,
+    Fine,
+    Finer,
+    Finest,
 }
 
 impl Trace {
     #[inline]
-    fn allows(&self, other: &Trace) -> bool {
-        *self as usize >= *other as usize
+    fn allows(self, other: Trace) -> bool {
+        self as usize >= other as usize
     }
 
     #[inline]
-    fn conditional(&self) -> Self {
+    fn conditional(self) -> Self {
         match log::log_enabled!(log::Level::Trace) {
-            true => *self,
-            false => Off
+            true => self,
+            false => Off,
         }
     }
 }
 
 #[test]
 fn trace_allows() {
-    assert!(!Trace::Off.allows(&Trace::Fine));
-    assert!(Trace::Fine.allows(&Trace::Fine));
-    assert!(!Trace::Fine.allows(&Trace::Finer));
-    assert!(Trace::Finer.allows(&Trace::Finer));
-    assert!(Trace::Finer.allows(&Trace::Fine));
+    assert!(!Trace::Off.allows(Trace::Fine));
+    assert!(Trace::Fine.allows(Trace::Fine));
+    assert!(!Trace::Fine.allows(Trace::Finer));
+    assert!(Trace::Finer.allows(Trace::Finer));
+    assert!(Trace::Finer.allows(Trace::Fine));
 }
 
 impl<'a, S> Checker<'a, S> {
@@ -172,6 +202,11 @@ impl<'a, S> Checker<'a, S> {
             //     live: Default::default(),
             //     strong_count: 0
             // },
+            stats: Stats {
+                schedules: 0,
+                deepest: 0,
+                steps: 0,
+            },
             model,
             stack: Vec::with_capacity(8),
             depth: 0,
@@ -191,28 +226,29 @@ impl<'a, S> Checker<'a, S> {
     }
 
     // fn init(&mut self) {
-        // for i in 0..self.model.actions.len() {
-        //     self.initials.live.insert(i);
-        // }
-        // self.initials.strong_count = self
-        //     .model
-        //     .actions
-        //     .iter()
-        //     .filter(|entry| entry.retention == Strong)
-        //     .count();
+    // for i in 0..self.model.actions.len() {
+    //     self.initials.live.insert(i);
+    // }
+    // self.initials.strong_count = self
+    //     .model
+    //     .actions
+    //     .iter()
+    //     .filter(|entry| entry.retention == Strong)
+    //     .count();
     // }
 
     #[inline]
     fn reset_run(&mut self) {
         //todo live and strong_count can be cached and cloned
         let trace = self.config.trace.conditional();
-        if trace.allows(&Trace::Fine) {
-            log::trace!("NEW RUN---------------------");
+        if trace.allows(Trace::Fine) {
+            log::trace!("new schedule {}", self.stats.schedules);
         }
         // self.live = self.initials.live.clone();
         // self.strong_count = self.initials.strong_count;
-        self.depth = 0;
+        self.stats.schedules += 1;
 
+        self.depth = 0;
         for i in 0..self.model.actions.len() {
             self.live.insert(i);
         }
@@ -224,38 +260,46 @@ impl<'a, S> Checker<'a, S> {
             .count();
     }
 
+    #[inline]
     fn hash(&self) -> u64 {
-        // let mut hasher = FxHasher::default();
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        // println!("depth {}", self.depth);
         hasher.write_usize(0x517cc1b727220a95); // K from FxHasher
         for i in 0..=self.depth {
             hasher.write_usize(self.stack[i].index);
         }
-        let hash = hasher.finish();
-        // println!("hash {}", hash);
-        hash
+        hasher.finish()
     }
 
+    #[inline]
+    fn capture_stats(&mut self) {
+        if self.depth + 1 > self.stats.deepest {
+            self.stats.deepest = self.depth + 1;
+        }
+        self.stats.steps += self.depth + 1;
+    }
+
+    #[inline]
     fn unwind(&mut self) -> Option<S> {
         let trace = self.config.trace.conditional();
+        self.capture_stats();
+
         loop {
             let mut top = &mut self.stack[self.depth];
             loop {
                 top.index += 1;
                 if top.index == self.model.actions.len()
                     || top.live_snapshot.contains(&top.index)
-                    && !top.blocked_snapshot.contains(&top.index)
+                        && !top.blocked_snapshot.contains(&top.index)
                 {
                     break;
                 }
             }
-            if trace.allows(&Trace::Finest) {
+            if trace.allows(Trace::Finest) {
                 log::trace!("    top {:?}", top);
             }
             if top.index == self.model.actions.len() {
                 self.stack.remove(self.depth);
-                if trace.allows(&Trace::Finest) {
+                if trace.allows(Trace::Finest) {
                     log::trace!("    popped {}", self.depth);
                 }
                 if self.depth > 0 {
@@ -274,6 +318,13 @@ impl<'a, S> Checker<'a, S> {
 
     pub fn check(mut self) -> CheckResult {
         let trace = self.config.trace.conditional();
+        if trace.allows(Trace::Fine) {
+            let model_name = match &self.model.name {
+                None => "untitled",
+                Some(name) => &name
+            };
+            log::trace!("checking '{}' with {:?}", model_name, self.config);
+        }
         // self.init();
         self.reset_run();
 
@@ -287,7 +338,7 @@ impl<'a, S> Checker<'a, S> {
             // }
 
             if self.depth == self.stack.len() {
-                if trace.allows(&Trace::Finest) {
+                if trace.allows(Trace::Finest) {
                     log::trace!("pushing...");
                 }
                 self.stack.push(Frame {
@@ -297,12 +348,12 @@ impl<'a, S> Checker<'a, S> {
                 });
             }
 
-            if trace.allows(&Trace::Finest) {
+            if trace.allows(Trace::Finest) {
                 log::trace!("depth: {}, stack {:?}", self.depth, self.stack);
             }
             let top = &self.stack[self.depth];
             if !self.live.contains(&top.index) {
-                if trace.allows(&Trace::Finer) {
+                if trace.allows(Trace::Finer) {
                     log::trace!("  skipping {} due to join", top.index);
                 }
 
@@ -316,7 +367,7 @@ impl<'a, S> Checker<'a, S> {
             }
 
             if self.blocked.contains(&top.index) {
-                if trace.allows(&Trace::Finer) {
+                if trace.allows(Trace::Finer) {
                     log::trace!("  skipping {} due to block", top.index);
                 }
 
@@ -338,7 +389,7 @@ impl<'a, S> Checker<'a, S> {
 
             let top = &self.stack[self.depth];
             let action_entry = &self.model.actions[top.index];
-            if trace.allows(&Trace::Fine) {
+            if trace.allows(Trace::Fine) {
                 log::trace!("  running {}", action_entry.name);
             }
             let context = Context {
@@ -349,14 +400,14 @@ impl<'a, S> Checker<'a, S> {
 
             match result {
                 ActionResult::Ran => {
-                    if trace.allows(&Trace::Fine) {
+                    if trace.allows(Trace::Fine) {
                         log::trace!("    ran");
                     }
                     self.depth += 1;
                     self.blocked.clear();
                 }
                 ActionResult::Blocked => {
-                    if trace.allows(&Trace::Fine) {
+                    if trace.allows(Trace::Fine) {
                         log::trace!("    blocked");
                     }
                     self.blocked.insert(top.index);
@@ -364,40 +415,18 @@ impl<'a, S> Checker<'a, S> {
                     // top.blocked += 1;
 
                     if self.blocked.len() == self.live.len() {
-                        if trace.allows(&Trace::Fine) {
-                            log::trace!("      deadlocked");
+                        self.capture_stats();
+                        if trace.allows(Trace::Fine) {
+                            log::trace!("      deadlocked with {:?}", self.stats);
                         }
                         return Deadlocked;
                     } else {
-                        // println!("      abandoning");
-                        // match self.unwind() {
-                        //     None => return Flawless,
-                        //     Some(s) => state = s
-                        // }
                         self.depth += 1;
                     }
-
-                    // if top.index + 1 == self.model.actions.len() {
-                    //     if self.blocked.len() == self.live.len() {
-                    //         println!("      deadlocked");
-                    //         return Deadlocked
-                    //     } else {
-                    //         // println!("      abandoning");
-                    //         // match self.unwind() {
-                    //         //     None => return Flawless,
-                    //         //     Some(s) => state = s
-                    //         // }
-                    //         println!("      diving");
-                    //         top.blocked = 0;
-                    //         self.depth += 1;
-                    //     }
-                    // } else {
-                    //     top.index += 1;
-                    // }
                     continue;
                 }
                 ActionResult::Joined => {
-                    if trace.allows(&Trace::Fine) {
+                    if trace.allows(Trace::Fine) {
                         log::trace!("    joined");
                     }
                     self.live.remove(&top.index);
@@ -406,11 +435,16 @@ impl<'a, S> Checker<'a, S> {
                     }
 
                     if self.strong_count == 0 {
-                        if trace.allows(&Trace::Finest) {
+                        if trace.allows(Trace::Finest) {
                             log::trace!("    no more strong actions");
                         }
                         match self.unwind() {
-                            None => return Flawless,
+                            None => {
+                                if trace.allows(Trace::Fine) {
+                                    log::trace!("  passed with {:?}", self.stats);
+                                }
+                                return Flawless;
+                            }
                             Some(s) => state = s,
                         }
                     } else {

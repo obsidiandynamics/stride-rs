@@ -2,46 +2,47 @@ use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 use stride::havoc::component::Lock;
 use stride::havoc::ActionResult::{Blocked, Joined, Ran};
 use stride::havoc::Retention::Strong;
-use stride::havoc::{CheckResult, Checker, Config, Model, Trace};
+use stride::havoc::{name_of, CheckResult, Checker, Config, Model, Trace};
 
 fn criterion_benchmark(c: &mut Criterion) {
     let _ = env_logger::builder().is_test(true).try_init();
 
-    let mut model = Model::new(|| vec![Lock::new(), Lock::new()]);
-    model.push("deadlock-a".into(), Strong, |s, c| {
-        if s[0].held(c.name()) {
-            if s[1].held(c.name()) {
-                s[1].unlock();
-                s[0].unlock();
-                Joined
-            } else if s[1].lock(c.name().into()) {
-                Ran
-            } else {
-                Blocked
-            }
-        } else if s[0].lock(c.name().into()) {
-            Ran
-        } else {
-            Blocked
-        }
-    });
-    model.push("deadlock-b".into(), Strong, |s, c| {
-        if s[1].held(c.name()) {
+    let mut model = Model::new(|| [Lock::new(), Lock::new()])
+        .with_name(name_of(&criterion_benchmark).into())
+        .with_action("deadlock-a".into(), Strong, |s, c| {
             if s[0].held(c.name()) {
-                s[0].unlock();
-                s[1].unlock();
-                Joined
+                if s[1].held(c.name()) {
+                    s[1].unlock();
+                    s[0].unlock();
+                    Joined
+                } else if s[1].lock(c.name().into()) {
+                    Ran
+                } else {
+                    Blocked
+                }
             } else if s[0].lock(c.name().into()) {
                 Ran
             } else {
                 Blocked
             }
-        } else if s[1].lock(c.name().into()) {
-            Ran
-        } else {
-            Blocked
-        }
-    });
+        })
+        .with_action("deadlock-b".into(), Strong, |s, c| {
+            if s[1].held(c.name()) {
+                if s[0].held(c.name()) {
+                    s[0].unlock();
+                    s[1].unlock();
+                    Joined
+                } else if s[0].lock(c.name().into()) {
+                    Ran
+                } else {
+                    Blocked
+                }
+            } else if s[1].lock(c.name().into()) {
+                Ran
+            } else {
+                Blocked
+            }
+        });
 
     c.bench_function("deadlock", |b| {
         b.iter_batched(

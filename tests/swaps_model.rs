@@ -58,12 +58,13 @@ impl State {
 
 #[test]
 fn swaps_one() {
-    let mut model = Model::new(|| State::new(1, vec![5, 7]));
-    const COMBOS: [(usize, usize); 1] = [(0, 1)];
+    let mut model = Model::new(|| State::new(1, vec![5, 7]))
+        .with_name(name_of(&swaps_one).into());
+    let combos = [(0, 1)];
 
-    for (cohort_index, &(p, q)) in COMBOS.iter().enumerate() {
+    for (cohort_index, &(p, q)) in combos.iter().enumerate() {
         let itemset = vec![format!("item-{}", p), format!("item-{}", q)];
-        model.push(
+        model.action(
             format!("initiator-{}-({}-{})", cohort_index, p, q),
             Weak,
             move |s, _| {
@@ -86,7 +87,7 @@ fn swaps_one() {
             },
         );
 
-        model.push(
+        model.action(
             format!("replicator-{}-({}-{})", cohort_index, p, q),
             Weak,
             move |s, _| {
@@ -108,7 +109,7 @@ fn swaps_one() {
         );
     }
 
-    model.push(
+    model.action(
         "certifier".into(), Weak,
         |s, _| {
             let certifier = &mut s.certifier;
@@ -135,7 +136,7 @@ fn swaps_one() {
         }
     );
 
-    model.push(
+    model.action(
         "supervisor".into(), Strong,
         |s, _| {
             let finished_cohorts = s.cohorts.iter()
