@@ -239,7 +239,6 @@ impl<'a, S> Checker<'a, S> {
 
     #[inline]
     fn reset_run(&mut self) {
-        //todo live and strong_count can be cached and cloned
         let trace = self.config.trace.conditional();
         if trace.allows(Trace::Fine) {
             log::trace!("new schedule {}", self.stats.schedules);
@@ -247,6 +246,16 @@ impl<'a, S> Checker<'a, S> {
         // self.live = self.initials.live.clone();
         // self.strong_count = self.initials.strong_count;
         self.stats.schedules += 1;
+        if self.stats.schedules % 100000 == 0 {
+            let num_actions = self.model.actions.len();
+            let (mut sum, mut frac, divisor) = (0f64, 1f64, num_actions as f64);
+            log::debug!("stack: {:?}", self.stack);
+            for (frame_index, frame) in self.stack.iter().enumerate() {
+                frac /= divisor;
+                sum += frame.index as f64 * frac;
+            }
+            log::debug!("progress: {:?}, {}%", self.stats, sum * 100f64);
+        }
 
         self.depth = 0;
         for i in 0..self.model.actions.len() {

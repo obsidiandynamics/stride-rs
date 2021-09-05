@@ -1,16 +1,16 @@
 mod fixtures;
 
 use fixtures::*;
+use std::borrow::Borrow;
 use std::rc::Rc;
 use stride::havoc::ActionResult::{Blocked, Joined, Ran};
 use stride::havoc::CheckResult::Flawless;
 use stride::havoc::Retention::Weak;
 use stride::havoc::*;
+use stride::Message::Decision;
 use stride::*;
 use uuid::Uuid;
 use Retention::Strong;
-use std::borrow::Borrow;
-use stride::Message::Decision;
 
 struct State {
     candidates_broker: Broker<CandidateMessage<Statemap>>,
@@ -38,7 +38,6 @@ impl State {
             candidates: candidates_broker.stream(),
             decisions: decisions_broker.stream(),
         };
-        // let expect_product = values.into_iter().reduce(|a, b| a * b).unwrap();
         let expect_product = values.iter().product();
 
         State {
@@ -56,11 +55,29 @@ impl State {
     }
 }
 
+fn init_log() {
+    let _ = env_logger::builder()
+        .is_test(true)
+        .try_init();
+}
+
 #[test]
 fn swaps_one() {
-    let mut model = Model::new(|| State::new(1, vec![5, 7]))
-        .with_name(name_of(&swaps_one).into());
-    let combos = [(0, 1)];
+    test_swaps(&[(0, 1)], &[5, 7], name_of(&swaps_one));
+}
+
+#[test]
+#[ignore]
+fn swaps_two() {
+    test_swaps(&[(0, 1), (1, 2)], &[3, 5, 7], name_of(&swaps_two));
+}
+
+fn test_swaps(combos: &[(usize, usize)], values: &[i32], name: &str) {
+    init_log();
+    let num_cohorts = combos.len();
+    let expect_txns = num_cohorts;
+    let mut model = Model::new(|| State::new(num_cohorts, Vec::from(values)))
+        .with_name(name.into());
 
     for (cohort_index, &(p, q)) in combos.iter().enumerate() {
         let itemset = vec![format!("item-{}", p), format!("item-{}", q)];
@@ -79,9 +96,9 @@ fn swaps_one() {
                         readset: itemset.clone(),
                         writeset: itemset.clone(),
                         readvers: cpt_readvers,
-                        snapshot: cpt_snapshot
+                        snapshot: cpt_snapshot,
                     },
-                    statemap
+                    statemap,
                 }));
                 Joined
             },
@@ -95,12 +112,16 @@ fn swaps_one() {
                 match cohort.decisions.consume() {
                     None => Blocked,
                     Some((_, decision)) => {
-                        match decision.outcome {
+                        match &decision.outcome {
                             Outcome::Commit(_, _) => {
-                                let statemap = decision.statemap.as_ref().expect("no statemap in commit");
+                                let statemap =
+                                    decision.statemap.as_ref().expect("no statemap in commit");
                                 cohort.replica.install_ser(statemap, decision.candidate.ver);
                             }
-                            Outcome::Abort(_, _) => {}
+                            Outcome::Abort(reason, _) => {
+                                log::trace!("ABORTED {:?}", reason);
+                            },
+                            _ => unreachable!()
                         }
                         Ran
                     }
@@ -109,46 +130,46 @@ fn swaps_one() {
         );
     }
 
-    model.action(
-        "certifier".into(), Weak,
-        |s, _| {
-            let certifier = &mut s.certifier;
-            match certifier.candidates.consume() {
-                None => Blocked,
-                Some((offset, candidate_message)) => {
-                    let candidate = Candidate {
-                        rec: candidate_message.rec.clone(),
-                        ver: offset as u64
-                    };
-                    let outcome = certifier.examiner.assess(&candidate);
-                    let statemap = match outcome {
-                        Outcome::Commit(_, _) => Some(candidate_message.statemap.clone()),
-                        Outcome::Abort(_, _) => None
-                    };
-                    certifier.decisions.produce(Rc::new(DecisionMessage {
-                        candidate,
-                        outcome,
-                        statemap
-                    }));
-                    Ran
-                }
+    model.action("certifier".into(), Weak, |s, _| {
+        let certifier = &mut s.certifier;
+        match certifier.candidates.consume() {
+            None => Blocked,
+            Some((offset, candidate_message)) => {
+                let candidate = Candidate {
+                    rec: candidate_message.rec.clone(),
+                    ver: offset as u64,
+                };
+                let outcome = certifier.examiner.assess(&candidate);
+                log::trace!("OUTCOME {:?}", outcome);
+                let statemap = match outcome {
+                    Outcome::Commit(_, _) => Some(candidate_message.statemap.clone()),
+                    Outcome::Abort(_, _) => None,
+                };
+                certifier.decisions.produce(Rc::new(DecisionMessage {
+                    candidate,
+                    outcome,
+                    statemap,
+                }));
+                Ran
             }
         }
-    );
+    });
 
-    model.action(
-        "supervisor".into(), Strong,
-        |s, _| {
-            let finished_cohorts = s.cohorts.iter()
-                .filter(|&cohort| cohort.replica.ver == 1)
-                .count();
-            match finished_cohorts {
-                1 => Joined,
-                _ => Blocked
-            }
+    model.action("supervisor".into(), Strong, |s, _| {
+        let finished_cohorts = s
+            .cohorts
+            .iter()
+            .filter(|&cohort| cohort.decisions.offset() == expect_txns + 1)
+            .count();
+        if finished_cohorts == num_cohorts {
+            Joined
+        } else {
+            Blocked
         }
-    );
+    });
 
-    let result = Checker::new(&model).check();
+    let result = Checker::new(&model)
+        .with_config(Config::default().with_trace(Trace::Fine))
+        .check();
     assert_eq!(Flawless, result);
 }

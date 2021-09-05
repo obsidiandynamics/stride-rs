@@ -131,6 +131,10 @@ impl<M> Stream<M> {
             .map(|(i, m)| (i + base, Rc::clone(&m)))
             .collect()
     }
+
+    pub fn offset(&self) -> usize {
+        self.offset
+    }
 }
 
 pub fn uuidify(pid: usize, run: usize) -> Uuid {
@@ -205,6 +209,7 @@ fn replica_install_ser() {
 fn stream_produce_consume() {
     let broker = Broker::new(0);
     let mut s0 = broker.stream();
+    assert_eq!(0, s0.offset);
     assert_eq!(None, s0.consume());
     assert_eq!(
         Vec::<(usize, Rc<&str>)>::new(),
@@ -232,6 +237,7 @@ fn stream_produce_consume() {
         s0.find(|i| String::from(*i).contains("s"))
     );
     assert_eq!(None, s0.consume());
+    assert_eq!(3, s0.offset);
 
     let mut s1 = broker.stream();
     assert_eq!(Some((0, Rc::new("first"))), s1.consume());
@@ -244,6 +250,7 @@ fn stream_produce_consume() {
 fn stream_produce_consume_with_offset() {
     let broker = Broker::new(10);
     let mut s0 = broker.stream();
+    assert_eq!(10, s0.offset);
     assert_eq!(None, s0.consume());
     assert_eq!(
         Vec::<(usize, Rc<&str>)>::new(),
@@ -271,6 +278,7 @@ fn stream_produce_consume_with_offset() {
         s0.find(|i| String::from(*i).contains("s"))
     );
     assert_eq!(None, s0.consume());
+    assert_eq!(13, s0.offset);
 
     let mut s1 = broker.stream();
     assert_eq!(Some((10, Rc::new("first"))), s1.consume());

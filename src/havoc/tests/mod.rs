@@ -94,6 +94,7 @@ fn two_actions_conditional() {
 
 #[test]
 fn two_actions_by_two() {
+    init_log();
     let total_runs = RefCell::new(Counter::new());
     let mut model = Model::new(Counter::new);
     model.action("two_actions_by_two_0".into(), Strong, |_, c| {
@@ -116,6 +117,7 @@ fn two_actions_by_two() {
 
 #[test]
 fn three_actions() {
+    init_log();
     let total_runs = RefCell::new(Counter::new());
     let mut model = Model::new(Counter::new);
     model.action("three_actions_a".into(), Strong, |_, c| {
@@ -140,6 +142,7 @@ fn three_actions() {
 
 #[test]
 fn three_actions_by_two() {
+    init_log();
     let total_runs = RefCell::new(Counter::new());
     let mut model = Model::new(Counter::new);
     model.action("three_actions_by_two_a".into(), Strong, |_, c| {
@@ -167,6 +170,7 @@ fn three_actions_by_two() {
 
 #[test]
 fn one_shot_deadlock() {
+    init_log();
     let run_count = Cell::new(0);
     let mut model = Model::new(Counter::new);
     model.action("one_shot_deadlock".into(), Strong, |_, _| {
@@ -181,6 +185,7 @@ fn one_shot_deadlock() {
 
 #[test]
 fn two_actions_no_deadlock() {
+    init_log();
     let mut model = Model::new(Lock::new);
     for c in ["a", "b"] {
         model.action(
@@ -243,12 +248,13 @@ fn two_actions_deadlock() {
             }
         });
 
-    let checker = Checker::new(&model).with_config(Config::default().with_trace(Trace::Fine));
+    let checker = Checker::new(&model).with_config(Config::default().with_trace(Trace::Finest));
     assert_eq!(CheckResult::Deadlocked, checker.check());
 }
 
 #[test]
 fn two_actions_one_weak_blocked() {
+    init_log();
     let total_runs = RefCell::new(Counter::new());
     let mut model = Model::new(Counter::new);
     model.action("two_actions_one_weak_a".into(), Strong, |s, c| {
@@ -274,6 +280,7 @@ fn two_actions_one_weak_blocked() {
 
 #[test]
 fn two_actions_one_weak_two_runs() {
+    init_log();
     let total_runs = RefCell::new(Counter::new());
     let mut model = Model::new(Counter::new);
     model.action("two_actions_one_weak_a".into(), Strong, |s, c| {
@@ -302,6 +309,7 @@ fn two_actions_one_weak_two_runs() {
 
 #[test]
 fn rand() {
+    init_log();
     let generated = RefCell::new(FxHashSet::default());
     let mut model = Model::new(Counter::new);
     const NUMS: i64 = 3;
