@@ -1,8 +1,10 @@
 use std::cell::RefCell;
 use std::ops::Deref;
 use std::rc::Rc;
-use stride::{CandidateMessage, DecisionMessage, Examiner, Message};
+
 use uuid::Uuid;
+
+use stride::{CandidateMessage, DecisionMessage, Examiner};
 
 #[derive(Debug, Clone)]
 pub struct Statemap {
@@ -127,7 +129,7 @@ impl<M> Stream<M> {
         let base = internals.base;
         messages
             .iter().enumerate()
-            .filter(|&(i, m)| predicate(m.deref()))
+            .filter(|&(_, m)| predicate(m.deref()))
             .map(|(i, m)| (i + base, Rc::clone(&m)))
             .collect()
     }

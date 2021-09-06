@@ -1,82 +1,14 @@
+pub mod model;
 pub mod component;
 
 use crate::havoc::CheckResult::{Deadlocked, Flawless};
-use crate::havoc::Retention::Strong;
 use crate::havoc::Trace::Off;
 use rand::rngs::StdRng;
 use rand::SeedableRng;
 use rustc_hash::FxHashSet;
 use std::hash::Hasher;
-
-pub struct Model<'a, S> {
-    setup: Box<dyn Fn() -> S + 'a>,
-    actions: Vec<ActionEntry<'a, S>>,
-    name: Option<String>
-}
-
-pub enum ActionResult {
-    Ran,
-    Blocked,
-    Joined,
-    Panicked,
-}
-
-#[derive(PartialEq, Debug)]
-pub enum Retention {
-    Strong,
-    Weak,
-}
-
-struct ActionEntry<'a, S> {
-    name: String,
-    retention: Retention,
-    action: Box<dyn Fn(&mut S, &Context<S>) -> ActionResult + 'a>,
-}
-
-pub fn name_of<T>(_: &T) -> &'static str {
-    std::any::type_name::<T>()
-}
-
-impl<'a, S> Model<'a, S> {
-    pub fn new<G>(setup: G) -> Self
-    where
-        G: Fn() -> S + 'a,
-    {
-        Model {
-            setup: Box::new(setup),
-            actions: vec![],
-            name: Option::None
-        }
-    }
-
-    pub fn action<F>(&mut self, name: String, retention: Retention, action: F)
-    where
-        F: Fn(&mut S, &Context<S>) -> ActionResult + 'a,
-    {
-        self.actions.push(ActionEntry {
-            name,
-            retention,
-            action: Box::new(action),
-        });
-    }
-
-    pub fn with_action<F>(mut self, name: String, retention: Retention, action: F) -> Self
-    where
-        F: Fn(&mut S, &Context<S>) -> ActionResult + 'a,
-    {
-        self.action(name, retention, action);
-        self
-    }
-
-    pub fn name(&mut self, name: String) {
-        self.name = Some(name);
-    }
-
-    pub fn with_name(mut self, name: String) -> Self {
-        self.name(name);
-        self
-    }
-}
+use crate::havoc::model::{Model, ActionResult, Context};
+use crate::havoc::model::Retention::Strong;
 
 pub struct Checker<'a, S> {
     config: Config,
@@ -104,25 +36,25 @@ pub enum CheckResult {
     Deadlocked,
 }
 
-pub struct Context<'a, S> {
+struct CheckContext<'a, S> {
     name: &'a str,
     checker: &'a Checker<'a, S>,
 }
 
-impl<S> Context<'_, S> {
-    pub fn name(&self) -> &str {
+impl<S> Context for CheckContext<'_, S> {
+    fn name(&self) -> &str {
         self.name
     }
 
-    pub fn rng(&self) -> StdRng {
+    fn rng(&self) -> StdRng {
         rand::rngs::StdRng::seed_from_u64(self.checker.hash())
     }
 }
 
-struct Initials {
-    // live: FxHashSet<usize>,
-    strong_count: usize,
-}
+// struct Initials {
+//     // live: FxHashSet<usize>,
+//     strong_count: usize,
+// }
 
 #[derive(Debug)]
 pub struct Stats {
@@ -252,7 +184,7 @@ impl<'a, S> Checker<'a, S> {
             let num_actions = self.model.actions.len();
             let (mut sum, mut frac, divisor) = (0f64, 1f64, num_actions as f64);
             log::debug!("stack: {:?}", self.stack);
-            for (frame_index, frame) in self.stack.iter().enumerate() {
+            for frame in self.stack.iter() {
                 frac /= divisor;
                 sum += frame.index as f64 * frac;
             }
@@ -322,7 +254,6 @@ impl<'a, S> Checker<'a, S> {
                 break;
             }
         }
-        let trace = self.config.trace;
         self.reset_run();
         Some((*self.model.setup)())
     }
@@ -395,7 +326,7 @@ impl<'a, S> Checker<'a, S> {
             if trace.allows(Trace::Fine) {
                 log::trace!("  running {}", action_entry.name);
             }
-            let context = Context {
+            let context = CheckContext {
                 name: &action_entry.name,
                 checker: &self,
             };

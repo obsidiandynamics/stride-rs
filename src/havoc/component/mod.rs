@@ -1,5 +1,5 @@
-use rustc_hash::FxHashMap;
 use std::collections::hash_map::Entry;
+use rustc_hash::FxHashMap;
 
 #[derive(Debug)]
 pub struct Counter {
@@ -89,6 +89,7 @@ impl Lock {
     }
 }
 
+#[cfg(test)]
 mod tests {
     use super::*;
 

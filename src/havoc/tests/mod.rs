@@ -1,9 +1,13 @@
-use super::*;
-use crate::havoc::component::*;
-use crate::havoc::ActionResult::*;
-use crate::havoc::Retention::Weak;
-use rand::Rng;
 use std::cell::{Cell, RefCell};
+
+use rand::Rng;
+
+use crate::havoc::component::*;
+use crate::havoc::model::ActionResult::{Blocked, Joined, Ran};
+use crate::havoc::model::name_of;
+use crate::havoc::model::Retention::Weak;
+
+use super::*;
 
 fn init_log() {
     let _ = env_logger::builder()
@@ -16,7 +20,7 @@ fn init_log() {
 fn one_shot() {
     init_log();
     let run_count = Cell::new(0);
-    let mut model = Model::new(Counter::new)
+    let model = Model::new(Counter::new)
         .with_name(name_of(&one_shot).into())
         .with_action("one_shot".into(), Strong, |_, _| {
             run_count.set(run_count.get() + 1);
@@ -32,7 +36,7 @@ fn one_shot() {
 fn two_shot() {
     init_log();
     let run_count = Cell::new(0);
-    let mut model = Model::new(Counter::new)
+    let model = Model::new(Counter::new)
         .with_name(name_of(&two_shot).into())
         .with_action("two_shot".into(), Strong, |s, c| {
             run_count.set(run_count.get() + 1);
@@ -51,7 +55,7 @@ fn two_shot() {
 fn two_actions() {
     init_log();
     let total_runs = RefCell::new(Counter::new());
-    let mut model = Model::new(Counter::new)
+    let model = Model::new(Counter::new)
         .with_name(name_of(&two_actions).into())
         .with_action("a".into(), Strong, |_, c| {
             total_runs.borrow_mut().inc(c.name().into());
@@ -72,19 +76,19 @@ fn two_actions() {
 fn two_actions_conditional() {
     init_log();
     let total_runs = RefCell::new(Counter::new());
-    let mut model = Model::new(Counter::new);
-    model.action("two_actions_conditional_a".into(), Strong, |s, c| {
-        total_runs.borrow_mut().inc(c.name().into());
-        s.inc(c.name().into());
-        Joined
-    });
-    model.action("two_actions_conditional_b".into(), Strong, |s, c| {
-        total_runs.borrow_mut().inc(c.name().into());
-        if s.inc(c.name().into()) == 0 && s.get("two_actions_conditional_a") == 0 {
-            return Ran;
-        }
-        Joined
-    });
+    let model = Model::new(Counter::new)
+        .with_action("two_actions_conditional_a".into(), Strong, |s, c| {
+            total_runs.borrow_mut().inc(c.name().into());
+            s.inc(c.name().into());
+            Joined
+        })
+        .with_action("two_actions_conditional_b".into(), Strong, |s, c| {
+            total_runs.borrow_mut().inc(c.name().into());
+            if s.inc(c.name().into()) == 0 && s.get("two_actions_conditional_a") == 0 {
+                return Ran;
+            }
+            Joined
+        });
     let checker = Checker::new(&model).with_config(Config::default().with_trace(Trace::Finest));
     let result = checker.check();
     assert_eq!(3, total_runs.borrow().get("two_actions_conditional_a"));
@@ -96,18 +100,18 @@ fn two_actions_conditional() {
 fn two_actions_by_two() {
     init_log();
     let total_runs = RefCell::new(Counter::new());
-    let mut model = Model::new(Counter::new);
-    model.action("two_actions_by_two_0".into(), Strong, |_, c| {
-        total_runs.borrow_mut().inc(c.name().into());
-        Joined
-    });
-    model.action("two_actions_by_two_1".into(), Strong, |s, c| {
-        total_runs.borrow_mut().inc(c.name().into());
-        match s.inc(c.name().into()) {
-            2 => Joined,
-            _ => Ran,
-        }
-    });
+    let model = Model::new(Counter::new)
+        .with_action("two_actions_by_two_0".into(), Strong, |_, c| {
+            total_runs.borrow_mut().inc(c.name().into());
+            Joined
+        })
+        .with_action("two_actions_by_two_1".into(), Strong, |s, c| {
+            total_runs.borrow_mut().inc(c.name().into());
+            match s.inc(c.name().into()) {
+                2 => Joined,
+                _ => Ran,
+            }
+        });
     let checker = Checker::new(&model);
     let result = checker.check();
     assert_eq!(3, total_runs.borrow().get("two_actions_by_two_0"));
@@ -119,19 +123,19 @@ fn two_actions_by_two() {
 fn three_actions() {
     init_log();
     let total_runs = RefCell::new(Counter::new());
-    let mut model = Model::new(Counter::new);
-    model.action("three_actions_a".into(), Strong, |_, c| {
-        total_runs.borrow_mut().inc(c.name().into());
-        Joined
-    });
-    model.action("three_actions_b".into(), Strong, |_, c| {
-        total_runs.borrow_mut().inc(c.name().into());
-        Joined
-    });
-    model.action("three_actions_c".into(), Strong, |_, c| {
-        total_runs.borrow_mut().inc(c.name().into());
-        Joined
-    });
+    let model = Model::new(Counter::new)
+        .with_action("three_actions_a".into(), Strong, |_, c| {
+            total_runs.borrow_mut().inc(c.name().into());
+            Joined
+        })
+        .with_action("three_actions_b".into(), Strong, |_, c| {
+            total_runs.borrow_mut().inc(c.name().into());
+            Joined
+        })
+        .with_action("three_actions_c".into(), Strong, |_, c| {
+            total_runs.borrow_mut().inc(c.name().into());
+            Joined
+        });
     let checker = Checker::new(&model);
     let result = checker.check();
     assert_eq!(6, total_runs.borrow().get("three_actions_a"));
@@ -144,22 +148,22 @@ fn three_actions() {
 fn three_actions_by_two() {
     init_log();
     let total_runs = RefCell::new(Counter::new());
-    let mut model = Model::new(Counter::new);
-    model.action("three_actions_by_two_a".into(), Strong, |_, c| {
-        total_runs.borrow_mut().inc(c.name().into());
-        Joined
-    });
-    model.action("three_actions_by_two_b".into(), Strong, |_, c| {
-        total_runs.borrow_mut().inc(c.name().into());
-        Joined
-    });
-    model.action("three_actions_by_two_c".into(), Strong, |s, c| {
-        total_runs.borrow_mut().inc(c.name().into());
-        match s.inc(c.name().into()) {
-            2 => Joined,
-            _ => Ran,
-        }
-    });
+    let model = Model::new(Counter::new)
+        .with_action("three_actions_by_two_a".into(), Strong, |_, c| {
+            total_runs.borrow_mut().inc(c.name().into());
+            Joined
+        })
+        .with_action("three_actions_by_two_b".into(), Strong, |_, c| {
+            total_runs.borrow_mut().inc(c.name().into());
+            Joined
+        })
+        .with_action("three_actions_by_two_c".into(), Strong, |s, c| {
+            total_runs.borrow_mut().inc(c.name().into());
+            match s.inc(c.name().into()) {
+                2 => Joined,
+                _ => Ran,
+            }
+        });
     let checker = Checker::new(&model);
     let result = checker.check();
     assert_eq!(12, total_runs.borrow().get("three_actions_by_two_a"));
@@ -172,8 +176,7 @@ fn three_actions_by_two() {
 fn one_shot_deadlock() {
     init_log();
     let run_count = Cell::new(0);
-    let mut model = Model::new(Counter::new);
-    model.action("one_shot_deadlock".into(), Strong, |_, _| {
+    let model = Model::new(Counter::new).with_action("one_shot_deadlock".into(), Strong, |_, _| {
         run_count.set(run_count.get() + 1);
         ActionResult::Blocked
     });
@@ -211,7 +214,7 @@ fn two_actions_no_deadlock() {
 #[test]
 fn two_actions_deadlock() {
     init_log();
-    let mut model = Model::new(|| [Lock::new(), Lock::new()])
+    let model = Model::new(|| [Lock::new(), Lock::new()])
         .with_name(name_of(&two_actions_deadlock).into())
         .with_action("deadlock-a".into(), Strong, |s, c| {
             if s[0].held(c.name()) {
@@ -256,21 +259,21 @@ fn two_actions_deadlock() {
 fn two_actions_one_weak_blocked() {
     init_log();
     let total_runs = RefCell::new(Counter::new());
-    let mut model = Model::new(Counter::new);
-    model.action("two_actions_one_weak_a".into(), Strong, |s, c| {
-        total_runs.borrow_mut().inc(c.name().into());
-        s.inc(c.name().into());
-        Joined
-    });
-    model.action("two_actions_one_weak_b".into(), Weak, |s, c| {
-        assert_eq!(
-            0,
-            s.get("two_actions_one_weak_a"),
-            "b should not run after a's join"
-        );
-        total_runs.borrow_mut().inc(c.name().into());
-        Blocked
-    });
+    let model = Model::new(Counter::new)
+        .with_action("two_actions_one_weak_a".into(), Strong, |s, c| {
+            total_runs.borrow_mut().inc(c.name().into());
+            s.inc(c.name().into());
+            Joined
+        })
+        .with_action("two_actions_one_weak_b".into(), Weak, |s, c| {
+            assert_eq!(
+                0,
+                s.get("two_actions_one_weak_a"),
+                "b should not run after a's join"
+            );
+            total_runs.borrow_mut().inc(c.name().into());
+            Blocked
+        });
     let checker = Checker::new(&model);
     let result = checker.check();
     // assert_eq!(2, total_runs.borrow().get("two_actions_one_weak_a"));
@@ -283,24 +286,24 @@ fn two_actions_one_weak_blocked() {
 fn two_actions_one_weak_two_runs() {
     init_log();
     let total_runs = RefCell::new(Counter::new());
-    let mut model = Model::new(Counter::new);
-    model.action("two_actions_one_weak_a".into(), Strong, |s, c| {
-        total_runs.borrow_mut().inc(c.name().into());
-        s.inc(c.name().into());
-        Joined
-    });
-    model.action("two_actions_one_weak_b".into(), Weak, |s, c| {
-        assert_eq!(
-            0,
-            s.get("two_actions_one_weak_a"),
-            "b should not run after a's join"
-        );
-        total_runs.borrow_mut().inc(c.name().into());
-        match s.inc(c.name().into()) {
-            2 => Joined,
-            _ => Ran,
-        }
-    });
+    let model = Model::new(Counter::new)
+        .with_action("two_actions_one_weak_a".into(), Strong, |s, c| {
+            total_runs.borrow_mut().inc(c.name().into());
+            s.inc(c.name().into());
+            Joined
+        })
+        .with_action("two_actions_one_weak_b".into(), Weak, |s, c| {
+            assert_eq!(
+                0,
+                s.get("two_actions_one_weak_a"),
+                "b should not run after a's join"
+            );
+            total_runs.borrow_mut().inc(c.name().into());
+            match s.inc(c.name().into()) {
+                2 => Joined,
+                _ => Ran,
+            }
+        });
     let checker = Checker::new(&model);
     let result = checker.check();
     assert_eq!(3, total_runs.borrow().get("two_actions_one_weak_a"));
@@ -312,9 +315,8 @@ fn two_actions_one_weak_two_runs() {
 fn rand() {
     init_log();
     let generated = RefCell::new(FxHashSet::default());
-    let mut model = Model::new(Counter::new);
     const NUMS: i64 = 3;
-    model.action("rand".into(), Strong, |s, c| {
+    let model = Model::new(Counter::new).with_action("rand".into(), Strong, |s, c| {
         let random_number = c.rng().gen::<i64>();
         generated.borrow_mut().insert(random_number);
         match s.inc(c.name().into()) {

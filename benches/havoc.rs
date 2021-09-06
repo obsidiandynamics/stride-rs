@@ -1,13 +1,14 @@
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 use stride::havoc::component::Lock;
-use stride::havoc::ActionResult::{Blocked, Joined, Ran};
-use stride::havoc::Retention::Strong;
-use stride::havoc::{name_of, CheckResult, Checker, Config, Model, Trace};
+use stride::havoc::model::{name_of, Model};
+use stride::havoc::model::Retention::Strong;
+use stride::havoc::model::ActionResult::{Blocked, Ran, Joined};
+use stride::havoc::{Checker, Trace, CheckResult, Config};
 
 fn criterion_benchmark(c: &mut Criterion) {
     let _ = env_logger::builder().is_test(true).try_init();
 
-    let mut model = Model::new(|| [Lock::new(), Lock::new()])
+    let model = Model::new(|| [Lock::new(), Lock::new()])
         .with_name(name_of(&criterion_benchmark).into())
         .with_action("deadlock-a".into(), Strong, |s, c| {
             if s[0].held(c.name()) {

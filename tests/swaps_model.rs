@@ -1,24 +1,21 @@
-mod fixtures;
-
-use fixtures::*;
-use std::borrow::Borrow;
 use std::rc::Rc;
-use stride::havoc::ActionResult::{Blocked, Joined, Ran};
-use stride::havoc::CheckResult::Flawless;
-use stride::havoc::Retention::Weak;
-use stride::havoc::*;
-use stride::Message::Decision;
-use stride::*;
-use uuid::Uuid;
-use Retention::Strong;
 use std::time::SystemTime;
 
+use fixtures::*;
+use stride::*;
+use stride::havoc::*;
+use stride::havoc::CheckResult::Flawless;
+use stride::havoc::model::{Model, name_of};
+use stride::havoc::model::ActionResult::{Blocked, Joined, Ran};
+use stride::havoc::model::Retention::{Strong, Weak};
+
+mod fixtures;
+
 struct State {
-    candidates_broker: Broker<CandidateMessage<Statemap>>,
-    decisions_broker: Broker<DecisionMessage<Statemap>>,
+    // candidates_broker: Broker<CandidateMessage<Statemap>>,
+    // decisions_broker: Broker<DecisionMessage<Statemap>>,
     cohorts: Vec<Cohort>,
     certifier: Certifier,
-    expect_product: i32,
 }
 
 impl State {
@@ -27,7 +24,7 @@ impl State {
         let decisions_broker = Broker::new(1);
         let cohorts = (0..num_cohorts)
             .into_iter()
-            .map(|i| Cohort {
+            .map(|_| Cohort {
                 pending: vec![],
                 replica: Replica::new(&values),
                 candidates: candidates_broker.stream(),
@@ -39,14 +36,12 @@ impl State {
             candidates: candidates_broker.stream(),
             decisions: decisions_broker.stream(),
         };
-        let expect_product = values.iter().product();
 
         State {
-            candidates_broker,
-            decisions_broker,
+            // candidates_broker,
+            // decisions_broker,
             cohorts,
             certifier,
-            expect_product,
         }
     }
 
@@ -132,8 +127,7 @@ fn test_swaps(combos: &[(usize, usize)], values: &[i32], name: &str) {
                             }
                             Outcome::Abort(reason, _) => {
                                 log::trace!("ABORTED {:?}", reason);
-                            },
-                            _ => unreachable!()
+                            }
                         }
                         Ran
                     }
