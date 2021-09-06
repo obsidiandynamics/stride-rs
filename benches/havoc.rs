@@ -1,9 +1,11 @@
-use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
+use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
+
+use stride::havoc::checker::{Checker, CheckResult, Config};
 use stride::havoc::component::Lock;
-use stride::havoc::model::{name_of, Model};
+use stride::havoc::model::{Model, name_of};
+use stride::havoc::model::ActionResult::{Blocked, Joined, Ran};
 use stride::havoc::model::Retention::Strong;
-use stride::havoc::model::ActionResult::{Blocked, Ran, Joined};
-use stride::havoc::{Checker, Trace, CheckResult, Config};
+use stride::havoc::Trace;
 
 fn criterion_benchmark(c: &mut Criterion) {
     let _ = env_logger::builder().is_test(true).try_init();

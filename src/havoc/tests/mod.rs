@@ -1,11 +1,13 @@
 use std::cell::{Cell, RefCell};
 
 use rand::Rng;
+use rustc_hash::FxHashSet;
 
+use crate::havoc::checker::{Checker, CheckResult, Config};
 use crate::havoc::component::*;
+use crate::havoc::model::{ActionResult, Model, name_of};
 use crate::havoc::model::ActionResult::{Blocked, Joined, Ran};
-use crate::havoc::model::name_of;
-use crate::havoc::model::Retention::Weak;
+use crate::havoc::model::Retention::{Strong, Weak};
 
 use super::*;
 

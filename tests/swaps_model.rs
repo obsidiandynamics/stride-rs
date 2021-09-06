@@ -3,11 +3,12 @@ use std::time::SystemTime;
 
 use fixtures::*;
 use stride::*;
-use stride::havoc::*;
-use stride::havoc::CheckResult::Flawless;
+use stride::havoc::checker::{Checker, Config};
+use stride::havoc::checker::CheckResult::Flawless;
 use stride::havoc::model::{Model, name_of};
 use stride::havoc::model::ActionResult::{Blocked, Joined, Ran};
 use stride::havoc::model::Retention::{Strong, Weak};
+use stride::havoc::Trace;
 
 mod fixtures;
 
