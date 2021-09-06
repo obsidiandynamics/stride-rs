@@ -11,6 +11,7 @@ use stride::Message::Decision;
 use stride::*;
 use uuid::Uuid;
 use Retention::Strong;
+use std::time::SystemTime;
 
 struct State {
     candidates_broker: Broker<CandidateMessage<Statemap>>,
@@ -21,7 +22,7 @@ struct State {
 }
 
 impl State {
-    fn new(num_cohorts: usize, values: Vec<i32>) -> Self {
+    fn new(num_cohorts: usize, values: &[i32]) -> Self {
         let candidates_broker = Broker::new(1);
         let decisions_broker = Broker::new(1);
         let cohorts = (0..num_cohorts)
@@ -52,7 +53,7 @@ impl State {
     fn asserter(values: &[i32]) -> impl Fn(&Replica) -> bool {
         let expected_product: i32 = values.iter().product();
         move|r| {
-            let computed_product = r.items.iter().map(|(item, _)| *item).product();
+            let computed_product: i32 = r.items.iter().map(|(item, _)| *item).product();
             expected_product == computed_product
         }
     }
@@ -74,12 +75,19 @@ fn swaps_two() {
     test_swaps(&[(0, 1), (1, 2)], &[3, 5, 7], name_of(&swaps_two));
 }
 
+#[test]
+#[ignore]
+fn swaps_three() {
+    test_swaps(&[(0, 1), (1, 2), (0, 2)], &[3, 5, 7], name_of(&swaps_three));
+}
+
 fn test_swaps(combos: &[(usize, usize)], values: &[i32], name: &str) {
     init_log();
+    let start = SystemTime::now();
     let num_cohorts = combos.len();
     let expect_txns = num_cohorts;
     let asserter = &State::asserter(values);
-    let mut model = Model::new(|| State::new(num_cohorts, Vec::from(values)))
+    let mut model = Model::new(|| State::new(num_cohorts, values))
         .with_name(name.into());
 
     for (cohort_index, &(p, q)) in combos.iter().enumerate() {
@@ -175,5 +183,7 @@ fn test_swaps(combos: &[(usize, usize)], values: &[i32], name: &str) {
     let result = Checker::new(&model)
         .with_config(Config::default().with_trace(Trace::Fine))
         .check();
+    let elapsed = SystemTime::now().duration_since(start).unwrap();
+    log::debug!("took {:?}", elapsed);
     assert_eq!(Flawless, result);
 }

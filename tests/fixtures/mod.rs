@@ -37,7 +37,7 @@ pub struct Replica {
 }
 
 impl Replica {
-    pub fn new(values: &Vec<i32>) -> Self {
+    pub fn new(values: &[i32]) -> Self {
         Replica {
             items: values.iter().map(|&i| (i, 0)).collect(),
             ver: 0,

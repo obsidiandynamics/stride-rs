@@ -336,18 +336,10 @@ impl<'a, S> Checker<'a, S> {
             };
             log::trace!("checking '{}' with {:?}", model_name, self.config);
         }
-        // self.init();
         self.reset_run();
 
-        // let mut i = 0;
         let mut state = (*self.model.setup)();
         loop {
-            // i += 1;
-            // if i > 70 {
-            //     println!("TOO MANY RUNS");
-            //     return CheckResult::Flawed
-            // }
-
             if self.depth == self.stack.len() {
                 if trace.allows(Trace::Finest) {
                     log::trace!("pushing...");
