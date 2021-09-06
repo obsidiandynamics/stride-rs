@@ -35,6 +35,3 @@ fn trace_allows() {
     assert!(Trace::Finer.allows(Trace::Finer));
     assert!(Trace::Finer.allows(Trace::Fine));
 }
-
-#[cfg(test)]
-mod tests;

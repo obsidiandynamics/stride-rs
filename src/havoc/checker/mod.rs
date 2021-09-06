@@ -377,3 +377,6 @@ impl<'a, S> Checker<'a, S> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;
