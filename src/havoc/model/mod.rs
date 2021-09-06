@@ -1,3 +1,4 @@
+use crate::havoc::model::Retention::Strong;
 use rand::prelude::StdRng;
 
 pub enum ActionResult {
@@ -10,7 +11,7 @@ pub enum ActionResult {
 pub struct Model<'a, S> {
     pub(crate) setup: Box<dyn Fn() -> S + 'a>,
     pub(crate) actions: Vec<ActionEntry<'a, S>>,
-    pub(crate) name: Option<String>
+    pub(crate) name: Option<String>,
 }
 
 #[derive(PartialEq, Debug)]
@@ -37,19 +38,19 @@ pub fn name_of<T>(_: &T) -> &'static str {
 
 impl<'a, S> Model<'a, S> {
     pub fn new<G>(setup: G) -> Self
-        where
-            G: Fn() -> S + 'a,
+    where
+        G: Fn() -> S + 'a,
     {
         Model {
             setup: Box::new(setup),
             actions: vec![],
-            name: Option::None
+            name: Option::None,
         }
     }
 
     pub fn action<F>(&mut self, name: String, retention: Retention, action: F)
-        where
-            F: Fn(&mut S, &dyn Context) -> ActionResult + 'a,
+    where
+        F: Fn(&mut S, &dyn Context) -> ActionResult + 'a,
     {
         self.actions.push(ActionEntry {
             name,
@@ -59,8 +60,8 @@ impl<'a, S> Model<'a, S> {
     }
 
     pub fn with_action<F>(mut self, name: String, retention: Retention, action: F) -> Self
-        where
-            F: Fn(&mut S, &dyn Context) -> ActionResult + 'a,
+    where
+        F: Fn(&mut S, &dyn Context) -> ActionResult + 'a,
     {
         self.action(name, retention, action);
         self
@@ -73,5 +74,12 @@ impl<'a, S> Model<'a, S> {
     pub fn with_name(mut self, name: String) -> Self {
         self.name(name);
         self
+    }
+
+    pub(crate) fn strong_count(&self) -> usize {
+        self.actions
+            .iter()
+            .filter(|entry| entry.retention == Strong)
+            .count()
     }
 }

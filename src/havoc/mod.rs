@@ -1,25 +1,26 @@
-use crate::havoc::Trace::Off;
+use crate::havoc::Sublevel::Off;
 
 pub mod model;
 pub mod checker;
 pub mod component;
+pub mod sim;
 
 #[derive(Copy, Clone, Debug)]
-pub enum Trace {
+pub enum Sublevel {
     Off,
     Fine,
     Finer,
     Finest,
 }
 
-impl Trace {
+impl Sublevel {
     #[inline]
-    fn allows(self, other: Trace) -> bool {
+    fn allows(self, other: Sublevel) -> bool {
         self as usize >= other as usize
     }
 
     #[inline]
-    fn conditional(self) -> Self {
+    fn if_trace(self) -> Self {
         match log::log_enabled!(log::Level::Trace) {
             true => self,
             false => Off,

@@ -1,10 +1,10 @@
-use crate::havoc::Trace;
+use crate::havoc::Sublevel;
 
 #[test]
-fn trace_allows() {
-    assert!(!Trace::Off.allows(Trace::Fine));
-    assert!(Trace::Fine.allows(Trace::Fine));
-    assert!(!Trace::Fine.allows(Trace::Finer));
-    assert!(Trace::Finer.allows(Trace::Finer));
-    assert!(Trace::Finer.allows(Trace::Fine));
+fn sublevel_allows() {
+    assert!(!Sublevel::Off.allows(Sublevel::Fine));
+    assert!(Sublevel::Fine.allows(Sublevel::Fine));
+    assert!(!Sublevel::Fine.allows(Sublevel::Finer));
+    assert!(Sublevel::Finer.allows(Sublevel::Finer));
+    assert!(Sublevel::Finer.allows(Sublevel::Fine));
 }

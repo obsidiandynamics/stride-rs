@@ -8,7 +8,7 @@ use stride::havoc::checker::CheckResult::Flawless;
 use stride::havoc::model::{Model, name_of};
 use stride::havoc::model::ActionResult::{Blocked, Joined, Ran};
 use stride::havoc::model::Retention::{Strong, Weak};
-use stride::havoc::Trace;
+use stride::havoc::Sublevel;
 
 mod fixtures;
 
@@ -176,7 +176,7 @@ fn test_swaps(combos: &[(usize, usize)], values: &[i32], name: &str) {
     });
 
     let result = Checker::new(&model)
-        .with_config(Config::default().with_trace(Trace::Fine))
+        .with_config(Config::default().with_sublevel(Sublevel::Fine))
         .check();
     let elapsed = SystemTime::now().duration_since(start).unwrap();
     log::debug!("took {:?}", elapsed);

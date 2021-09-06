@@ -5,7 +5,7 @@ use stride::havoc::component::Lock;
 use stride::havoc::model::{Model, name_of};
 use stride::havoc::model::ActionResult::{Blocked, Joined, Ran};
 use stride::havoc::model::Retention::Strong;
-use stride::havoc::Trace;
+use stride::havoc::Sublevel;
 
 fn criterion_benchmark(c: &mut Criterion) {
     let _ = env_logger::builder().is_test(true).try_init();
@@ -52,7 +52,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             || {
                 Checker::new(&model).with_config(
                     Config::default()
-                        .with_trace(Trace::Fine)
+                        .with_sublevel(Sublevel::Fine)
                         .with_max_depth(usize::MAX),
                 )
             },
