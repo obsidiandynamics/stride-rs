@@ -284,8 +284,7 @@ fn dfs_two_actions_one_weak_blocked() {
             Joined
         })
         .with_action("b".into(), Weak, |s, c| {
-            assert_eq!(0, s.get("a"), "b should not run after a's join"
-            );
+            assert_eq!(0, s.get("a"), "b should not run after a's join");
             total_runs.borrow_mut().inc(c.name().into());
             Blocked
         });

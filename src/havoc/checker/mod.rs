@@ -9,7 +9,7 @@ use crate::havoc::model::{ActionResult, Context, Model};
 use crate::havoc::model::Retention::Strong;
 use crate::havoc::Sublevel;
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Eq, Hash)]
 pub enum CheckResult {
     Flawless,
     Flawed,
