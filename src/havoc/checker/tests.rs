@@ -1,9 +1,8 @@
 use std::cell::{Cell, RefCell};
 
-use rand::Rng;
 use rustc_hash::FxHashSet;
 
-use crate::havoc::checker::{Checker, CheckResult, Config};
+use crate::havoc::checker::{Checker, Config};
 use crate::havoc::component::*;
 use crate::havoc::model::{ActionResult, Model, name_of};
 use crate::havoc::model::ActionResult::{Blocked, Joined, Ran};
@@ -34,7 +33,7 @@ fn dfs_one_shot() {
         });
 
     let checker = Checker::new(&model).with_config(default_config());
-    assert_eq!(CheckResult::Flawless, checker.check());
+    assert_eq!(Flawless, checker.check());
     assert_eq!(1, run_count.get());
 }
 
@@ -53,7 +52,7 @@ fn dfs_two_shots() {
         });
 
     let checker = Checker::new(&model).with_config(default_config());
-    assert_eq!(CheckResult::Flawless, checker.check());
+    assert_eq!(Flawless, checker.check());
     assert_eq!(2, run_count.get());
 }
 
@@ -74,7 +73,7 @@ fn dfs_two_actions() {
 
     let checker = Checker::new(&model).with_config(default_config());
     let result = checker.check();
-    assert_eq!(CheckResult::Flawless, result);
+    assert_eq!(Flawless, result);
     assert_eq!(2, total_runs.borrow().get("a"));
     assert_eq!(2, total_runs.borrow().get("b"));
 }
@@ -100,7 +99,7 @@ fn dfs_two_actions_conditional() {
 
     let checker = Checker::new(&model).with_config(default_config());
     let result = checker.check();
-    assert_eq!(CheckResult::Flawless, result);
+    assert_eq!(Flawless, result);
     assert_eq!(1, total_runs.borrow().get("a"));
     assert_eq!(1, total_runs.borrow().get("b"));
 }
@@ -125,7 +124,7 @@ fn dfs_two_actions_by_two() {
 
     let checker = Checker::new(&model).with_config(default_config());
     let result = checker.check();
-    assert_eq!(CheckResult::Flawless, result);
+    assert_eq!(Flawless, result);
     assert_eq!(3, total_runs.borrow().get("a"));
     assert_eq!(6, total_runs.borrow().get("b"));
 }
@@ -151,7 +150,7 @@ fn dfs_three_actions() {
 
     let checker = Checker::new(&model).with_config(default_config());
     let result = checker.check();
-    assert_eq!(CheckResult::Flawless, result);
+    assert_eq!(Flawless, result);
     assert_eq!(6, total_runs.borrow().get("a"));
     assert_eq!(6, total_runs.borrow().get("b"));
     assert_eq!(6, total_runs.borrow().get("c"));
@@ -184,7 +183,7 @@ fn dfs_three_actions_by_two() {
     assert_eq!(12, total_runs.borrow().get("a"));
     assert_eq!(12, total_runs.borrow().get("b"));
     assert_eq!(24, total_runs.borrow().get("c"));
-    assert_eq!(CheckResult::Flawless, result);
+    assert_eq!(Flawless, result);
 }
 
 #[test]
@@ -199,7 +198,7 @@ fn dfs_one_shot_deadlock() {
         });
 
     let checker = Checker::new(&model).with_config(default_config());
-    assert_eq!(CheckResult::Deadlocked, checker.check());
+    assert_eq!(Deadlocked, checker.check());
     assert_eq!(1, run_count.get());
 }
 
@@ -225,7 +224,7 @@ fn dfs_two_actions_no_deadlock() {
     }
 
     let checker = Checker::new(&model).with_config(default_config());
-    assert_eq!(CheckResult::Flawless, checker.check());
+    assert_eq!(Flawless, checker.check());
 }
 
 #[test]
@@ -269,7 +268,7 @@ fn dfs_two_actions_deadlock() {
         });
 
     let checker = Checker::new(&model).with_config(default_config());
-    assert_eq!(CheckResult::Deadlocked, checker.check());
+    assert_eq!(Deadlocked, checker.check());
 }
 
 #[test]
@@ -291,7 +290,7 @@ fn dfs_two_actions_one_weak_blocked() {
 
     let checker = Checker::new(&model).with_config(default_config());
     let result = checker.check();
-    assert_eq!(CheckResult::Flawless, result);
+    assert_eq!(Flawless, result);
     assert_eq!(1, total_runs.borrow().get("a"));
     assert_eq!(1, total_runs.borrow().get("b"));
 }
@@ -308,8 +307,7 @@ fn dfs_two_actions_one_weak_two_runs() {
             Joined
         })
         .with_action("b".into(), Weak, |s, c| {
-            assert_eq!(0, s.get("a"), "b should not run after a's join"
-            );
+            assert_eq!(0, s.get("a"), "b should not run after a's join");
             total_runs.borrow_mut().inc(c.name().into());
             match s.inc(c.name().into()) {
                 2 => Joined,
@@ -319,7 +317,7 @@ fn dfs_two_actions_one_weak_two_runs() {
 
     let checker = Checker::new(&model).with_config(default_config());
     let result = checker.check();
-    assert_eq!(CheckResult::Flawless, result);
+    assert_eq!(Flawless, result);
     assert_eq!(3, total_runs.borrow().get("a"));
     assert_eq!(3, total_runs.borrow().get("b"));
 }
@@ -332,17 +330,17 @@ fn dfs_rand() {
     let model = Model::new(Counter::new)
         .with_name(name_of(&dfs_rand).into())
         .with_action("test".into(), Strong, |s, c| {
-            let random_number = c.rng().gen::<i64>();
+            let random_number = c.rand();
             generated.borrow_mut().insert(random_number);
             match s.inc(c.name().into()) {
                 NUM_RUNS => Joined,
                 _ => Ran,
             }
         });
-    assert_eq!(CheckResult::Flawless, Checker::new(&model).with_config(default_config()).check());
+    assert_eq!(Flawless, Checker::new(&model).with_config(default_config()).check());
     assert_eq!(NUM_RUNS, generated.borrow().len() as i64);
 
     // repeat run should yield the same random numbers
-    assert_eq!(CheckResult::Flawless, Checker::new(&model).with_config(default_config()).check());
+    assert_eq!(Flawless, Checker::new(&model).with_config(default_config()).check());
     assert_eq!(NUM_RUNS, generated.borrow().len() as i64);
 }

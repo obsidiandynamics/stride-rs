@@ -31,7 +31,7 @@ fn sim_one_shot() {
         });
 
     let sim = Sim::new(&model).with_config(default_config().with_max_schedules(3));
-    assert_eq!(SimResult::Flawless, sim.check());
+    assert_eq!(Flawless, sim.check());
     assert_eq!(3, run_count.get());
 }
 
@@ -50,7 +50,7 @@ fn sim_two_shots() {
         });
 
     let sim = Sim::new(&model).with_config(default_config().with_max_schedules(3));
-    assert_eq!(SimResult::Flawless, sim.check());
+    assert_eq!(Flawless, sim.check());
     assert_eq!(6, run_count.get());
 }
 
@@ -71,7 +71,7 @@ fn sim_two_actions() {
 
     let sim = Sim::new(&model).with_config(default_config().with_max_schedules(2));
     let result = sim.check();
-    assert_eq!(SimResult::Flawless, result);
+    assert_eq!(Flawless, result);
     assert_le!(2, total_runs.borrow().get("a"));
     assert_eq!(2, total_runs.borrow().get("a"));
     assert_eq!(2, total_runs.borrow().get("b"));
@@ -98,7 +98,7 @@ fn sim_two_actions_conditional() {
 
     let sim = Sim::new(&model).with_config(default_config().with_max_schedules(5));
     let result = sim.check();
-    assert_eq!(SimResult::Flawless, result);
+    assert_eq!(Flawless, result);
     assert_eq!(5, total_runs.borrow().get("a"));
     assert_eq!(5, total_runs.borrow().get("b"));
 }
@@ -123,7 +123,7 @@ fn sim_two_actions_by_two() {
 
     let sim = Sim::new(&model).with_config(default_config().with_max_schedules(3));
     let result = sim.check();
-    assert_eq!(SimResult::Flawless, result);
+    assert_eq!(Flawless, result);
     assert_eq!(3, total_runs.borrow().get("a"));
     assert_eq!(6, total_runs.borrow().get("b"));
 }
@@ -149,7 +149,7 @@ fn sim_three_actions() {
 
     let sim = Sim::new(&model).with_config(default_config().with_max_schedules(3));
     let result = sim.check();
-    assert_eq!(SimResult::Flawless, result);
+    assert_eq!(Flawless, result);
     assert_eq!(3, total_runs.borrow().get("a"));
     assert_eq!(3, total_runs.borrow().get("b"));
     assert_eq!(3, total_runs.borrow().get("c"));
@@ -182,7 +182,7 @@ fn sim_three_actions_by_two() {
     assert_eq!(3, total_runs.borrow().get("a"));
     assert_eq!(3, total_runs.borrow().get("b"));
     assert_eq!(6, total_runs.borrow().get("c"));
-    assert_eq!(SimResult::Flawless, result);
+    assert_eq!(Flawless, result);
 }
 
 #[test]
@@ -223,7 +223,7 @@ fn sim_two_actions_no_deadlock() {
     }
 
     let sim = Sim::new(&model).with_config(default_config().with_max_schedules(10));
-    assert_eq!(SimResult::Flawless, sim.check());
+    assert_eq!(Flawless, sim.check());
 }
 
 #[test]
@@ -297,56 +297,81 @@ fn sim_two_actions_one_weak_blocked() {
         });
 
     let mut sim = Sim::new(&model).with_config(default_config());
-    let (mut b_ran, mut b_did_not_run) = (false, false);
+    let mut run_counts = FxHashSet::default();
     let mut seed = 0;
     for _ in 0..999 {
         sim.seed(seed);
         seed += 1;
-        let result = sim.check();
-        assert_eq!(SimResult::Flawless, result);
+        assert_eq!(Flawless, sim.check());
         let mut total_runs = total_runs.borrow_mut();
-        match total_runs.get("b") {
-            1 => b_ran = {
-                total_runs.reset("b");
-                true
-            },
-            0 => b_did_not_run = true,
-            times => panic!("b ran {} times", times)
-        }
-        if b_ran && b_did_not_run {
+        run_counts.insert(total_runs.get("b"));
+        total_runs.reset("b");
+        if run_counts.len() == 2 {
             break;
         }
     }
     assert_eq!(seed, total_runs.borrow().get("a") as u64);
-    assert!(b_ran);
-    assert!(b_did_not_run);
+    assert_eq!(FxHashSet::from_iter([0, 1]), run_counts);
 }
 
 
-// #[test]
-// fn sim_two_actions_one_weak_two_runs() {
-//     init_log();
-//     let total_runs = RefCell::new(Counter::new());
-//     let model = Model::new(Counter::new)
-//         .with_name(name_of(&sim_two_actions_one_weak_two_runs).into())
-//         .with_action("a".into(), Strong, |s, c| {
-//             total_runs.borrow_mut().inc(c.name().into());
-//             s.inc(c.name().into());
-//             Joined
-//         })
-//         .with_action("b".into(), Weak, |s, c| {
-//             assert_eq!(0, s.get("a"), "b should not run after a's join"
-//             );
-//             total_runs.borrow_mut().inc(c.name().into());
-//             match s.inc(c.name().into()) {
-//                 2 => Joined,
-//                 _ => Ran,
-//             }
-//         });
-//
-//     let sim = Sim::new(&model).with_config(default_config());
-//     let result = sim.check();
-//     assert_eq!(SimResult::Flawless, result);
-//     assert_eq!(3, total_runs.borrow().get("a"));
-//     assert_eq!(3, total_runs.borrow().get("b"));
-// }
+#[test]
+fn sim_two_actions_one_weak_two_runs() {
+    init_log();
+    let total_runs = RefCell::new(Counter::new());
+    let model = Model::new(Counter::new)
+        .with_name(name_of(&sim_two_actions_one_weak_two_runs).into())
+        .with_action("a".into(), Strong, |s, c| {
+            total_runs.borrow_mut().inc(c.name().into());
+            s.inc(c.name().into());
+            Joined
+        })
+        .with_action("b".into(), Weak, |s, c| {
+            assert_eq!(0, s.get("a"), "b should not run after a's join");
+            total_runs.borrow_mut().inc(c.name().into());
+            match s.inc(c.name().into()) {
+                2 => Joined,
+                _ => Ran,
+            }
+        });
+
+    let mut sim = Sim::new(&model).with_config(default_config());
+    let mut run_counts = FxHashSet::default();
+    let mut seed = 0;
+    for _ in 0..999 {
+        sim.seed(seed);
+        seed += 1;
+        assert_eq!(Flawless, sim.check());
+        let mut total_runs = total_runs.borrow_mut();
+        run_counts.insert(total_runs.get("b"));
+        total_runs.reset("b");
+        if run_counts.len() == 3 {
+            break;
+        }
+    }
+    assert_eq!(seed, total_runs.borrow().get("a") as u64);
+    assert_eq!(FxHashSet::from_iter([0, 1, 2]), run_counts);
+}
+
+#[test]
+fn sim_rand() {
+    init_log();
+    let generated = RefCell::new(FxHashSet::default());
+    const NUM_RUNS: i64 = 3;
+    let model = Model::new(Counter::new)
+        .with_name(name_of(&sim_rand).into())
+        .with_action("test".into(), Strong, |s, c| {
+            let random_number = c.rand();
+            generated.borrow_mut().insert(random_number);
+            match s.inc(c.name().into()) {
+                NUM_RUNS => Joined,
+                _ => Ran,
+            }
+        });
+    assert_eq!(Flawless, Sim::new(&model).with_config(default_config()).check());
+    assert_eq!(NUM_RUNS, generated.borrow().len() as i64);
+
+    // repeat run should yield the same random numbers
+    assert_eq!(Flawless, Sim::new(&model).with_config(default_config()).check());
+    assert_eq!(NUM_RUNS, generated.borrow().len() as i64);
+}

@@ -1,7 +1,6 @@
 use std::hash::Hasher;
 
-use rand::rngs::StdRng;
-use rand::SeedableRng;
+use rand::{SeedableRng, RngCore};
 use rustc_hash::FxHashSet;
 
 use crate::havoc::checker::CheckResult::{Deadlocked, Flawless};
@@ -26,8 +25,8 @@ impl<S> Context for CheckContext<'_, S> {
         self.name
     }
 
-    fn rng(&self) -> StdRng {
-        rand::rngs::StdRng::seed_from_u64(self.checker.hash())
+    fn rand(&self) -> u64 {
+        rand::rngs::StdRng::seed_from_u64(self.checker.hash()).next_u64()
     }
 }
 
@@ -126,12 +125,12 @@ impl<'a, S> Checker<'a, S> {
         if self.stats.executed % 100000 == 0 {
             let num_actions = self.model.actions.len();
             let (mut sum, mut frac, divisor) = (0f64, 1f64, num_actions as f64);
-            log::debug!("stack: {:?}", self.stack);
+            // log::debug!("stack: {:?}", self.stack);
             for frame in self.stack.iter() {
                 frac /= divisor;
                 sum += frame.index as f64 * frac;
             }
-            log::debug!("progress: {:?}, {}%", self.stats, sum * 100f64);
+            log::debug!("progress: {:?}, {:.6}%", self.stats, sum * 100f64);
         }
 
         self.depth = 0;

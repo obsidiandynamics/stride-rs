@@ -1,20 +1,18 @@
 use std::rc::Rc;
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 
 use fixtures::*;
-use stride::*;
-use stride::havoc::checker::{Checker, Config};
-use stride::havoc::checker::CheckResult::Flawless;
-use stride::havoc::model::{Model, name_of};
+use stride::havoc::checker::{CheckResult, Checker};
 use stride::havoc::model::ActionResult::{Blocked, Joined, Ran};
 use stride::havoc::model::Retention::{Strong, Weak};
-use stride::havoc::Sublevel;
+use stride::havoc::model::{name_of, Model};
+use stride::havoc::sim::{Sim, SimResult};
+use stride::havoc::{checker, sim, Sublevel};
+use stride::*;
 
 mod fixtures;
 
 struct State {
-    // candidates_broker: Broker<CandidateMessage<Statemap>>,
-    // decisions_broker: Broker<DecisionMessage<Statemap>>,
     cohorts: Vec<Cohort>,
     certifier: Certifier,
 }
@@ -48,7 +46,7 @@ impl State {
 
     fn asserter(values: &[i32]) -> impl Fn(&Replica) -> bool {
         let expected_product: i32 = values.iter().product();
-        move|r| {
+        move |r| {
             let computed_product: i32 = r.items.iter().map(|(item, _)| *item).product();
             expected_product == computed_product
         }
@@ -56,35 +54,37 @@ impl State {
 }
 
 fn init_log() {
-    let _ = env_logger::builder()
-        .is_test(true)
-        .try_init();
+    let _ = env_logger::builder().is_test(true).try_init();
 }
 
 #[test]
-fn swaps_one() {
-    test_swaps(&[(0, 1)], &[5, 7], name_of(&swaps_one));
+fn dfs_swaps_one() {
+    dfs_test(&[(0, 1)], &[5, 7], name_of(&dfs_swaps_one));
 }
 
 #[test]
-fn swaps_two() {
-    test_swaps(&[(0, 1), (1, 2)], &[3, 5, 7], name_of(&swaps_two));
+fn dfs_swaps_two() {
+    dfs_test(&[(0, 1), (1, 2)], &[3, 5, 7], name_of(&dfs_swaps_two));
 }
 
 #[test]
 #[ignore]
-fn swaps_three() {
-    test_swaps(&[(0, 1), (1, 2), (0, 2)], &[3, 5, 7], name_of(&swaps_three));
+fn dfs_swaps_three() {
+    dfs_test(
+        &[(0, 1), (1, 2), (0, 2)],
+        &[3, 5, 7],
+        name_of(&dfs_swaps_three),
+    );
 }
 
-fn test_swaps(combos: &[(usize, usize)], values: &[i32], name: &str) {
-    init_log();
-    let start = SystemTime::now();
+fn build_model<'a>(
+    combos: &[(usize, usize)],
+    values: &'a [i32],
+    name: &str,
+) -> Model<'a, State> {
     let num_cohorts = combos.len();
     let expect_txns = num_cohorts;
-    let asserter = &State::asserter(values);
-    let mut model = Model::new(|| State::new(num_cohorts, values))
-        .with_name(name.into());
+    let mut model = Model::new(move || State::new(num_cohorts, values)).with_name(name.into());
 
     for (cohort_index, &(p, q)) in combos.iter().enumerate() {
         let itemset = vec![format!("item-{}", p), format!("item-{}", q)];
@@ -111,6 +111,7 @@ fn test_swaps(combos: &[(usize, usize)], values: &[i32], name: &str) {
             },
         );
 
+        let asserter = State::asserter(values);
         model.action(
             format!("replicator-{}-({}-{})", cohort_index, p, q),
             Weak,
@@ -162,7 +163,7 @@ fn test_swaps(combos: &[(usize, usize)], values: &[i32], name: &str) {
         }
     });
 
-    model.action("supervisor".into(), Strong, |s, _| {
+    model.action("supervisor".into(), Strong, move |s, _| {
         let finished_cohorts = s
             .cohorts
             .iter()
@@ -175,10 +176,62 @@ fn test_swaps(combos: &[(usize, usize)], values: &[i32], name: &str) {
         }
     });
 
-    let result = Checker::new(&model)
-        .with_config(Config::default().with_sublevel(Sublevel::Fine))
-        .check();
-    let elapsed = SystemTime::now().duration_since(start).unwrap();
+    model
+}
+
+fn dfs_test(combos: &[(usize, usize)], values: &[i32], name: &str) {
+    init_log();
+    let model = build_model(combos, values, name);
+    let (result, elapsed) = timed(|| {
+        Checker::new(&model)
+            .with_config(checker::Config::default().with_sublevel(Sublevel::Fine))
+            .check()
+    });
     log::debug!("took {:?}", elapsed);
-    assert_eq!(Flawless, result);
+    assert_eq!(CheckResult::Flawless, result);
+}
+
+#[test]
+fn sim_swaps_one() {
+    sim_test(&[(0, 1)], &[5, 7], name_of(&sim_swaps_one), 10);
+}
+
+#[test]
+fn sim_swaps_two() {
+    sim_test(&[(0, 1), (1, 2)], &[3, 5, 7], name_of(&sim_swaps_two), 100);
+}
+
+#[test]
+#[ignore]
+fn sim_swaps_three() {
+    sim_test(
+        &[(0, 1), (1, 2), (0, 2)],
+        &[3, 5, 7],
+        name_of(&sim_swaps_three),
+        1_000_000,
+    );
+}
+
+fn timed<F, R>(f: F) -> (R, Duration)
+where
+    F: Fn() -> R,
+{
+    let start = SystemTime::now();
+    (f(), SystemTime::now().duration_since(start).unwrap())
+}
+
+fn sim_test(combos: &[(usize, usize)], values: &[i32], name: &str, max_schedules: usize) {
+    init_log();
+    let model = build_model(combos, values, name);
+    let (result, elapsed) = timed(|| {
+        Sim::new(&model)
+            .with_config(
+                sim::Config::default()
+                    .with_sublevel(Sublevel::Fine)
+                    .with_max_schedules(max_schedules),
+            )
+            .check()
+    });
+    log::debug!("took {:?}", elapsed);
+    assert_eq!(SimResult::Flawless, result);
 }

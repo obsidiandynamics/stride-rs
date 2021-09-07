@@ -1,11 +1,12 @@
-use crate::havoc::Sublevel;
-use crate::havoc::model::{Model, Context, ActionResult};
-use crate::havoc::sim::SimResult::{Flawless, Deadlocked};
-use rustc_hash::FxHashSet;
-use rand::{SeedableRng, Rng};
 use std::hash::Hasher;
-use rand::rngs::StdRng;
+
+use rand::{Rng, RngCore, SeedableRng};
+use rustc_hash::FxHashSet;
+
+use crate::havoc::model::{ActionResult, Context, Model};
 use crate::havoc::model::Retention::Strong;
+use crate::havoc::sim::SimResult::{Deadlocked, Flawless};
+use crate::havoc::Sublevel;
 
 #[derive(PartialEq, Debug, Eq, Hash)]
 pub enum SimResult {
@@ -62,6 +63,7 @@ impl Config {
 struct SimContext<'a> {
     name: &'a str,
     stack: &'a [usize],
+    schedule: usize
 }
 
 impl Context for SimContext<'_> {
@@ -69,19 +71,20 @@ impl Context for SimContext<'_> {
         self.name
     }
 
-    fn rng(&self) -> StdRng {
-        let hash = hash(self.stack);
-        rand::rngs::StdRng::seed_from_u64(hash)
+    fn rand(&self) -> u64 {
+        let hash = hash(self.stack, self.schedule);
+        rand::rngs::StdRng::seed_from_u64(hash).next_u64()
     }
 }
 
 #[inline]
-fn hash(stack: &[usize]) -> u64 {
+fn hash(stack: &[usize], schedule: usize) -> u64 {
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     hasher.write_usize(0x517cc1b727220a95); // K from FxHasher
     for &i in stack {
         hasher.write_usize(i);
     }
+    hasher.write_usize(schedule);
     hasher.finish()
 }
 
@@ -182,7 +185,8 @@ impl<'a, S> Sim<'a, S> {
                 }
                 let context = SimContext {
                     name: &action_entry.name,
-                    stack: &stack
+                    stack: &stack,
+                    schedule: stats.completed
                 };
                 let result = (*action_entry.action)(&mut state, &context);
                 match result {
@@ -235,6 +239,10 @@ impl<'a, S> Sim<'a, S> {
                 stats.deepest = depth;
             }
             stats.steps += depth;
+
+            if stats.completed % 10000 == 0 {
+                log::debug!("progress: {:?}, {:.6}%", stats, stats.completed as f64 / self.config.max_schedules as f64 * 100f64);
+            }
         }
     }
 }

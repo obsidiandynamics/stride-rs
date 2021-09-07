@@ -1,5 +1,4 @@
 use crate::havoc::model::Retention::Strong;
-use rand::prelude::StdRng;
 
 pub enum ActionResult {
     Ran,
@@ -23,7 +22,7 @@ pub enum Retention {
 pub trait Context {
     fn name(&self) -> &str;
 
-    fn rng(&self) -> StdRng;
+    fn rand(&self) -> u64;
 }
 
 pub(crate) struct ActionEntry<'a, S> {
