@@ -25,7 +25,7 @@ impl<S> Context for CheckContext<'_, S> {
         self.name
     }
 
-    fn rand(&self) -> u64 {
+    fn rand(&mut self) -> u64 {
         rand::rngs::StdRng::seed_from_u64(self.checker.hash()).next_u64()
     }
 }
@@ -256,11 +256,11 @@ impl<'a, S> Checker<'a, S> {
             if sublevel.allows(Sublevel::Fine) {
                 log::trace!("  running {}", action_entry.name);
             }
-            let context = CheckContext {
+            let mut context = CheckContext {
                 name: &action_entry.name,
                 checker: &self,
             };
-            let result = (*action_entry.action)(&mut state, &context);
+            let result = (*action_entry.action)(&mut state, &mut context);
 
             match result {
                 ActionResult::Ran => {

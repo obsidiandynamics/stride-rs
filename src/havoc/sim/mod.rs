@@ -3,7 +3,7 @@ use std::hash::Hasher;
 use rand::{Rng, RngCore, SeedableRng};
 use rustc_hash::FxHashSet;
 
-use crate::havoc::model::{ActionResult, Context, Model};
+use crate::havoc::model::{ActionResult, Context, Model, Trace, Call};
 use crate::havoc::model::Retention::Strong;
 use crate::havoc::sim::SimResult::{Deadlock, Pass, Fail};
 use crate::havoc::Sublevel;
@@ -61,29 +61,31 @@ impl Config {
     }
 }
 
-struct SimContext<'a> {
-    name: &'a str,
-    stack: &'a [usize],
+struct SimContext<'a, S> {
+    model: &'a Model<'a, S>,
+    trace: &'a mut Trace,
     schedule: usize
 }
 
-impl Context for SimContext<'_> {
+impl<S> Context for SimContext<'_, S> {
     fn name(&self) -> &str {
-        self.name
+        &self.model.actions[self.trace.peek().action].name
     }
 
-    fn rand(&self) -> u64 {
-        let hash = hash(self.stack, self.schedule);
-        rand::rngs::StdRng::seed_from_u64(hash).next_u64()
+    fn rand(&mut self) -> u64 {
+        let hash = hash(self.trace, self.schedule);
+        let rand = rand::rngs::StdRng::seed_from_u64(hash).next_u64();
+        self.trace.push_rand(rand);
+        rand
     }
 }
 
 #[inline]
-fn hash(stack: &[usize], schedule: usize) -> u64 {
+fn hash(trace: &Trace, schedule: usize) -> u64 {
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     hasher.write_usize(0x517cc1b727220a95); // K from FxHasher
-    for &i in stack {
-        hasher.write_usize(i);
+    for call in &trace.stack {
+        hasher.write_usize(call.action);
     }
     hasher.write_usize(schedule);
     hasher.finish()
@@ -134,7 +136,7 @@ impl<'a, S> Sim<'a, S> {
         let init_strong_count = self.model.strong_count();
         let mut live = FxHashSet::default();
         let mut blocked = FxHashSet::default();
-        let mut stack = vec![];
+        let mut trace = Trace::new();
         let mut stats = Stats {
             completed: 0,
             deepest: 0,
@@ -156,7 +158,7 @@ impl<'a, S> Sim<'a, S> {
             for i in 0..self.model.actions.len() {
                 live.insert(i);
             }
-            stack.clear();
+            trace.stack.clear();
             let mut strong_count = init_strong_count;
 
             let mut rng = rand::rngs::StdRng::seed_from_u64(stats.completed as u64 + self.seed);
@@ -179,18 +181,18 @@ impl<'a, S> Sim<'a, S> {
                     continue;
                 }
 
-                stack.push(action_index);
+                trace.stack.push(Call { action: action_index, rands: vec![] });
                 let action_entry = &self.model.actions[action_index];
                 if sublevel.allows(Sublevel::Fine) {
                     log::trace!("  running {}", action_entry.name);
                 }
-                let context = SimContext {
-                    name: &action_entry.name,
-                    stack: &stack,
+                let mut context = SimContext {
+                    model: &self.model,
+                    trace: &mut trace,
                     schedule: stats.completed
                 };
 
-                let result = (*action_entry.action)(&mut state, &context);
+                let result = (*action_entry.action)(&mut state, &mut context);
                 match result {
                     Ran => {
                         if sublevel.allows(Sublevel::Fine) {
@@ -202,7 +204,7 @@ impl<'a, S> Sim<'a, S> {
                         if sublevel.allows(Sublevel::Fine) {
                             log::trace!("    blocked");
                         }
-                        stack.remove(stack.len() - 1);
+                        trace.pop();
                         blocked.insert(action_index);
                         if blocked.len() == live.len() {
                             if sublevel.allows(Sublevel::Fine) {
@@ -223,7 +225,7 @@ impl<'a, S> Sim<'a, S> {
 
                         if strong_count == 0 {
                             if sublevel.allows(Sublevel::Finest) {
-                                log::trace!("    no more strong actions");
+                                log::trace!("    no more strong actions, {:?}", trace);
                             }
                             break;
                         }
@@ -239,7 +241,7 @@ impl<'a, S> Sim<'a, S> {
             }
 
             stats.completed += 1;
-            let depth = stack.len();
+            let depth = trace.stack.len();
             if depth > stats.deepest {
                 stats.deepest = depth;
             }

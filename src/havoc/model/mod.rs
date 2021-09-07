@@ -22,13 +22,13 @@ pub enum Retention {
 pub trait Context {
     fn name(&self) -> &str;
 
-    fn rand(&self) -> u64;
+    fn rand(&mut self) -> u64;
 }
 
 pub(crate) struct ActionEntry<'a, S> {
     pub(crate) name: String,
     pub(crate) retention: Retention,
-    pub(crate) action: Box<dyn Fn(&mut S, &dyn Context) -> ActionResult + 'a>,
+    pub(crate) action: Box<dyn Fn(&mut S, &mut dyn Context) -> ActionResult + 'a>,
 }
 
 pub fn name_of<T>(_: &T) -> &'static str {
@@ -49,7 +49,7 @@ impl<'a, S> Model<'a, S> {
 
     pub fn action<F>(&mut self, name: String, retention: Retention, action: F)
     where
-        F: Fn(&mut S, &dyn Context) -> ActionResult + 'a,
+        F: Fn(&mut S, &mut dyn Context) -> ActionResult + 'a,
     {
         self.actions.push(ActionEntry {
             name,
@@ -60,7 +60,7 @@ impl<'a, S> Model<'a, S> {
 
     pub fn with_action<F>(mut self, name: String, retention: Retention, action: F) -> Self
     where
-        F: Fn(&mut S, &dyn Context) -> ActionResult + 'a,
+        F: Fn(&mut S, &mut dyn Context) -> ActionResult + 'a,
     {
         self.action(name, retention, action);
         self
@@ -92,4 +92,26 @@ pub struct Trace {
 pub struct Call {
     pub action: usize,
     pub rands: Vec<u64>
+}
+
+impl Trace {
+    pub(crate) fn new() -> Self {
+        Trace { stack: vec![] }
+    }
+
+    pub (crate) fn peek(&self) -> &Call {
+        self.stack.last().unwrap()
+    }
+
+    pub(crate) fn peek_mut(&mut self) -> &mut Call {
+        self.stack.last_mut().unwrap()
+    }
+
+    pub(crate) fn push_rand(&mut self, rand: u64) {
+        self.peek_mut().rands.push(rand);
+    }
+
+    pub(crate) fn pop(&mut self) -> Call {
+        self.stack.remove(self.stack.len() - 1)
+    }
 }
