@@ -31,7 +31,7 @@ fn sim_one_shot() {
         });
 
     let sim = Sim::new(&model).with_config(default_config().with_max_schedules(3));
-    assert_eq!(Flawless, sim.check());
+    assert_eq!(Pass, sim.check());
     assert_eq!(3, run_count.get());
 }
 
@@ -50,7 +50,7 @@ fn sim_two_shots() {
         });
 
     let sim = Sim::new(&model).with_config(default_config().with_max_schedules(3));
-    assert_eq!(Flawless, sim.check());
+    assert_eq!(Pass, sim.check());
     assert_eq!(6, run_count.get());
 }
 
@@ -71,7 +71,7 @@ fn sim_two_actions() {
 
     let sim = Sim::new(&model).with_config(default_config().with_max_schedules(2));
     let result = sim.check();
-    assert_eq!(Flawless, result);
+    assert_eq!(Pass, result);
     assert_le!(2, total_runs.borrow().get("a"));
     assert_eq!(2, total_runs.borrow().get("a"));
     assert_eq!(2, total_runs.borrow().get("b"));
@@ -98,7 +98,7 @@ fn sim_two_actions_conditional() {
 
     let sim = Sim::new(&model).with_config(default_config().with_max_schedules(5));
     let result = sim.check();
-    assert_eq!(Flawless, result);
+    assert_eq!(Pass, result);
     assert_eq!(5, total_runs.borrow().get("a"));
     assert_eq!(5, total_runs.borrow().get("b"));
 }
@@ -123,7 +123,7 @@ fn sim_two_actions_by_two() {
 
     let sim = Sim::new(&model).with_config(default_config().with_max_schedules(3));
     let result = sim.check();
-    assert_eq!(Flawless, result);
+    assert_eq!(Pass, result);
     assert_eq!(3, total_runs.borrow().get("a"));
     assert_eq!(6, total_runs.borrow().get("b"));
 }
@@ -149,7 +149,7 @@ fn sim_three_actions() {
 
     let sim = Sim::new(&model).with_config(default_config().with_max_schedules(3));
     let result = sim.check();
-    assert_eq!(Flawless, result);
+    assert_eq!(Pass, result);
     assert_eq!(3, total_runs.borrow().get("a"));
     assert_eq!(3, total_runs.borrow().get("b"));
     assert_eq!(3, total_runs.borrow().get("c"));
@@ -182,7 +182,7 @@ fn sim_three_actions_by_two() {
     assert_eq!(3, total_runs.borrow().get("a"));
     assert_eq!(3, total_runs.borrow().get("b"));
     assert_eq!(6, total_runs.borrow().get("c"));
-    assert_eq!(Flawless, result);
+    assert_eq!(Pass, result);
 }
 
 #[test]
@@ -197,7 +197,7 @@ fn sim_one_shot_deadlock() {
         });
 
     let sim = Sim::new(&model).with_config(default_config());
-    assert_eq!(Deadlocked, sim.check());
+    assert_eq!(Deadlock, sim.check());
     assert_eq!(1, run_count.get());
 }
 
@@ -223,7 +223,7 @@ fn sim_two_actions_no_deadlock() {
     }
 
     let sim = Sim::new(&model).with_config(default_config().with_max_schedules(10));
-    assert_eq!(Flawless, sim.check());
+    assert_eq!(Pass, sim.check());
 }
 
 #[test]
@@ -276,7 +276,7 @@ fn sim_two_actions_deadlock() {
         }
     }
     // some runs will result in a deadlock, while others will pass
-    assert_eq!(FxHashSet::from_iter([Deadlocked, Flawless]), results);
+    assert_eq!(FxHashSet::from_iter([Deadlock, Pass]), results);
 }
 
 #[test]
@@ -302,7 +302,7 @@ fn sim_two_actions_one_weak_blocked() {
     for _ in 0..999 {
         sim.seed(seed);
         seed += 1;
-        assert_eq!(Flawless, sim.check());
+        assert_eq!(Pass, sim.check());
         let mut total_runs = total_runs.borrow_mut();
         run_counts.insert(total_runs.get("b"));
         total_runs.reset("b");
@@ -341,7 +341,7 @@ fn sim_two_actions_one_weak_two_runs() {
     for _ in 0..999 {
         sim.seed(seed);
         seed += 1;
-        assert_eq!(Flawless, sim.check());
+        assert_eq!(Pass, sim.check());
         let mut total_runs = total_runs.borrow_mut();
         run_counts.insert(total_runs.get("b"));
         total_runs.reset("b");
@@ -368,10 +368,26 @@ fn sim_rand() {
                 _ => Ran,
             }
         });
-    assert_eq!(Flawless, Sim::new(&model).with_config(default_config()).check());
+    assert_eq!(Pass, Sim::new(&model).with_config(default_config()).check());
     assert_eq!(NUM_RUNS, generated.borrow().len() as i64);
 
     // repeat run should yield the same random numbers
-    assert_eq!(Flawless, Sim::new(&model).with_config(default_config()).check());
+    assert_eq!(Pass, Sim::new(&model).with_config(default_config()).check());
     assert_eq!(NUM_RUNS, generated.borrow().len() as i64);
+}
+
+#[test]
+fn sim_one_shot_breach() {
+    init_log();
+    let run_count = Cell::new(0);
+    let model = Model::new(Counter::new)
+        .with_name(name_of(&sim_one_shot_breach).into())
+        .with_action("action".into(), Strong, |_, _| {
+            run_count.set(run_count.get() + 1);
+            Breached("some invariant".into())
+        });
+
+    let sim = Sim::new(&model).with_config(default_config().with_max_schedules(3));
+    assert_eq!(Fail("some invariant".into()), sim.check());
+    assert_eq!(1, run_count.get());
 }

@@ -3,7 +3,7 @@ use std::hash::Hasher;
 use rand::{SeedableRng, RngCore};
 use rustc_hash::FxHashSet;
 
-use crate::havoc::checker::CheckResult::{Deadlocked, Flawless};
+use crate::havoc::checker::CheckResult::{Deadlocked, Flawless, Flawed};
 use crate::havoc::model::{ActionResult, Context, Model};
 use crate::havoc::model::Retention::Strong;
 use crate::havoc::Sublevel;
@@ -11,7 +11,7 @@ use crate::havoc::Sublevel;
 #[derive(PartialEq, Debug, Eq, Hash)]
 pub enum CheckResult {
     Flawless,
-    Flawed,
+    Flawed(String),
     Deadlocked,
 }
 
@@ -332,8 +332,8 @@ impl<'a, S> Checker<'a, S> {
                     }
                     self.blocked.clear();
                 }
-                ActionResult::Panicked => {
-                    todo!();
+                ActionResult::Breached(error) => {
+                    return Flawed(error);
                 }
             }
         }

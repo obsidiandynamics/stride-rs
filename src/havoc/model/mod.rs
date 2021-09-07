@@ -4,7 +4,7 @@ pub enum ActionResult {
     Ran,
     Blocked,
     Joined,
-    Panicked,
+    Breached(String),
 }
 
 pub struct Model<'a, S> {
@@ -81,4 +81,15 @@ impl<'a, S> Model<'a, S> {
             .filter(|entry| entry.retention == Strong)
             .count()
     }
+}
+
+#[derive(Debug)]
+pub struct Trace {
+    pub stack: Vec<Call>
+}
+
+#[derive(Debug)]
+pub struct Call {
+    pub action: usize,
+    pub rands: Vec<u64>
 }

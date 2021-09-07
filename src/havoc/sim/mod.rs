@@ -5,14 +5,15 @@ use rustc_hash::FxHashSet;
 
 use crate::havoc::model::{ActionResult, Context, Model};
 use crate::havoc::model::Retention::Strong;
-use crate::havoc::sim::SimResult::{Deadlocked, Flawless};
+use crate::havoc::sim::SimResult::{Deadlock, Pass, Fail};
 use crate::havoc::Sublevel;
+use ActionResult::{Breached, Joined, Blocked, Ran};
 
 #[derive(PartialEq, Debug, Eq, Hash)]
 pub enum SimResult {
-    Flawless,
-    Flawed,
-    Deadlocked,
+    Pass,
+    Fail(String),
+    Deadlock,
 }
 
 #[derive(Debug)]
@@ -145,7 +146,7 @@ impl<'a, S> Sim<'a, S> {
                 if sublevel.allows(Sublevel::Fine) {
                     log::trace!("  passed with {:?}", stats);
                 }
-                return Flawless
+                return Pass
             }
 
             if sublevel.allows(Sublevel::Fine) {
@@ -188,15 +189,16 @@ impl<'a, S> Sim<'a, S> {
                     stack: &stack,
                     schedule: stats.completed
                 };
+
                 let result = (*action_entry.action)(&mut state, &context);
                 match result {
-                    ActionResult::Ran => {
+                    Ran => {
                         if sublevel.allows(Sublevel::Fine) {
                             log::trace!("    ran");
                         }
                         blocked.clear();
                     }
-                    ActionResult::Blocked => {
+                    Blocked => {
                         if sublevel.allows(Sublevel::Fine) {
                             log::trace!("    blocked");
                         }
@@ -206,10 +208,10 @@ impl<'a, S> Sim<'a, S> {
                             if sublevel.allows(Sublevel::Fine) {
                                 log::trace!("      deadlocked with {:?}", stats);
                             }
-                            return Deadlocked;
+                            return Deadlock;
                         }
                     }
-                    ActionResult::Joined => {
+                    Joined => {
                         if sublevel.allows(Sublevel::Fine) {
                             log::trace!("    joined");
                         }
@@ -227,8 +229,11 @@ impl<'a, S> Sim<'a, S> {
                         }
                         live.remove(&action_index);
                     }
-                    ActionResult::Panicked => {
-                        todo!();
+                    Breached(error) => {
+                        if sublevel.allows(Sublevel::Fine) {
+                            log::trace!("      invariant breached: {}", error);
+                        }
+                        return Fail(error)
                     }
                 }
             }

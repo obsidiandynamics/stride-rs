@@ -217,7 +217,7 @@ where
     F: Fn() -> R,
 {
     let start = SystemTime::now();
-    (f(), SystemTime::now().duration_since(start).unwrap())
+    (f(), SystemTime::now().duration_since(start).unwrap_or(Duration::new(0, 0)))
 }
 
 fn sim_test(combos: &[(usize, usize)], values: &[i32], name: &str, max_schedules: usize) {
@@ -233,5 +233,5 @@ fn sim_test(combos: &[(usize, usize)], values: &[i32], name: &str, max_schedules
             .check()
     });
     log::debug!("took {:?}", elapsed);
-    assert_eq!(SimResult::Flawless, result);
+    assert_eq!(SimResult::Pass, result);
 }
