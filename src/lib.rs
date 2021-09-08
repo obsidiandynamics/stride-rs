@@ -42,6 +42,19 @@ pub struct Record {
     pub snapshot: u64,
 }
 
+impl Record {
+    pub fn compress(cpt_readvers: Vec<u64>, cpt_snapshot: u64) -> (Vec<u64>, u64) {
+        if cpt_readvers.is_empty() {
+            (cpt_readvers, cpt_snapshot)
+        } else {
+            let smallest_readver = *cpt_readvers.iter().min().unwrap();
+            let snapshot = std::cmp::max(cpt_snapshot, smallest_readver);
+            let readvers = cpt_readvers.into_iter().filter(|&v| v > snapshot).collect();
+            (readvers, snapshot)
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct Examiner {
     reads: FxHashMap<String, u64>,
@@ -454,5 +467,12 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn compress() {
+        assert_eq!((vec![], 10), Record::compress(vec![3, 6, 9], 10));
+        assert_eq!((vec![6, 9], 4), Record::compress(vec![3, 6, 9], 4));
+        assert_eq!((vec![6, 9], 3), Record::compress(vec![3, 6, 9], 1));
     }
 }

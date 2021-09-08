@@ -61,26 +61,6 @@ fn init_log() {
     let _ = env_logger::builder().is_test(true).try_init();
 }
 
-#[test]
-fn dfs_swaps_one() {
-    dfs_test(&[(0, 1)], &[101, 103], name_of(&dfs_swaps_one));
-}
-
-#[test]
-fn dfs_swaps_two() {
-    dfs_test(&[(0, 1), (1, 2)], &[101, 103, 107], name_of(&dfs_swaps_two));
-}
-
-#[test]
-#[ignore]
-fn dfs_swaps_three() {
-    dfs_test(
-        &[(0, 1), (1, 2), (0, 2)],
-        &[101, 103, 107],
-        name_of(&dfs_swaps_three),
-    );
-}
-
 fn build_model<'a>(
     combos: &[(usize, usize)],
     values: &'a [i32],
@@ -93,7 +73,7 @@ fn build_model<'a>(
     for (cohort_index, &(p, q)) in combos.iter().enumerate() {
         let itemset = vec![format!("item-{}", p), format!("item-{}", q)];
         model.action(
-            format!("initiator-{}-({}-{})", cohort_index, p, q),
+            format!("initiator-{})", cohort_index),
             Weak,
             move |s, _| {
                 let cohort = &s.cohorts[cohort_index];
@@ -101,13 +81,14 @@ fn build_model<'a>(
                 let cpt_readvers = vec![old_p.1, old_q.1];
                 let cpt_snapshot = cohort.replica.ver;
                 let statemap = Statemap::new(vec![(p, old_q.0), (q, old_p.0)]);
+                let (readvers, snapshot) = Record::compress(cpt_readvers, cpt_snapshot);
                 cohort.candidates.produce(Rc::new(CandidateMessage {
                     rec: Record {
                         xid: uuidify(cohort_index, 0),
                         readset: itemset.clone(),
                         writeset: itemset.clone(),
-                        readvers: cpt_readvers,
-                        snapshot: cpt_snapshot,
+                        readvers,
+                        snapshot
                     },
                     statemap,
                 }));
@@ -132,7 +113,7 @@ fn build_model<'a>(
                 });
 
                 if ! installable_commits.is_empty() {
-                    println!("Installable {:?}", installable_commits);
+                    log::trace!("Installable {:?}", installable_commits);
                     let (_, commit) = rand_element(c, &installable_commits);
                     match commit.outcome {
                         Outcome::Commit(safepoint, _) => {
@@ -221,6 +202,35 @@ fn build_model<'a>(
     model
 }
 
+fn timed<F, R>(f: F) -> (R, Duration)
+    where
+        F: Fn() -> R,
+{
+    let start = SystemTime::now();
+    (f(), SystemTime::now().duration_since(start).unwrap_or(Duration::new(0, 0)))
+}
+
+#[test]
+fn dfs_swaps_one() {
+    dfs_test(&[(0, 1)], &[101, 103], name_of(&dfs_swaps_one));
+}
+
+#[test]
+#[ignore]
+fn dfs_swaps_two() {
+    dfs_test(&[(0, 1), (1, 2)], &[101, 103, 107], name_of(&dfs_swaps_two));
+}
+
+#[test]
+#[ignore]
+fn dfs_swaps_three() {
+    dfs_test(
+        &[(0, 1), (1, 2), (0, 2)],
+        &[101, 103, 107],
+        name_of(&dfs_swaps_three),
+    );
+}
+
 fn dfs_test(combos: &[(usize, usize)], values: &[i32], name: &str) {
     init_log();
     let model = build_model(combos, values, name);
@@ -252,14 +262,6 @@ fn sim_swaps_three() {
         name_of(&sim_swaps_three),
         1_000_000,
     );
-}
-
-fn timed<F, R>(f: F) -> (R, Duration)
-where
-    F: Fn() -> R,
-{
-    let start = SystemTime::now();
-    (f(), SystemTime::now().duration_since(start).unwrap_or(Duration::new(0, 0)))
 }
 
 fn sim_test(combos: &[(usize, usize)], values: &[i32], name: &str, max_schedules: usize) {
