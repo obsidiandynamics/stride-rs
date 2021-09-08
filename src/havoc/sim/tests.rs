@@ -3,7 +3,6 @@ use crate::havoc::model::name_of;
 use std::cell::{Cell, RefCell};
 use crate::havoc::component::{Counter, Lock};
 use crate::havoc::model::ActionResult::{Joined, Ran, Blocked};
-use more_asserts::assert_le;
 use rustc_hash::FxHashSet;
 use std::iter::FromIterator;
 use crate::havoc::model::Retention::Weak;
@@ -72,7 +71,6 @@ fn sim_two_actions() {
     let sim = Sim::new(&model).with_config(default_config().with_max_schedules(2));
     let result = sim.check();
     assert_eq!(Pass, result);
-    assert_le!(2, total_runs.borrow().get("a"));
     assert_eq!(2, total_runs.borrow().get("a"));
     assert_eq!(2, total_runs.borrow().get("b"));
 }
@@ -206,7 +204,7 @@ fn sim_two_actions_no_deadlock() {
     init_log();
     let mut model = Model::new(Lock::new).with_name(name_of(&sim_two_actions_no_deadlock).into());
     for c in ["a", "b"] {
-        model.action(
+        model.add_action(
             String::from("test-".to_owned() + c),
             Strong,
             |s, c| {
@@ -269,7 +267,7 @@ fn sim_two_actions_deadlock() {
     let mut sim = Sim::new(&model).with_config(default_config());
     let mut results = FxHashSet::default();
     for seed in 0..999 {
-        sim.seed(seed);
+        sim.set_seed(seed);
         results.insert(sim.check());
         if results.len() == 2 {
             break;
@@ -300,7 +298,7 @@ fn sim_two_actions_one_weak_blocked() {
     let mut run_counts = FxHashSet::default();
     let mut seed = 0;
     for _ in 0..999 {
-        sim.seed(seed);
+        sim.set_seed(seed);
         seed += 1;
         assert_eq!(Pass, sim.check());
         let mut total_runs = total_runs.borrow_mut();
@@ -339,7 +337,7 @@ fn sim_two_actions_one_weak_two_runs() {
     let mut run_counts = FxHashSet::default();
     let mut seed = 0;
     for _ in 0..999 {
-        sim.seed(seed);
+        sim.set_seed(seed);
         seed += 1;
         assert_eq!(Pass, sim.check());
         let mut total_runs = total_runs.borrow_mut();

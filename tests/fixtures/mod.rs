@@ -5,6 +5,9 @@ use std::rc::Rc;
 use uuid::Uuid;
 
 use stride::{CandidateMessage, DecisionMessage, Examiner};
+use std::time::{Duration, SystemTime};
+use std::env;
+use std::str::FromStr;
 
 #[derive(Debug, Clone)]
 pub struct Statemap {
@@ -153,6 +156,26 @@ impl<M> Stream<M> {
 
 pub fn uuidify(pid: usize, run: usize) -> Uuid {
     Uuid::from_u128((pid as u128) << 64 | run as u128)
+}
+
+pub fn timed<F, R>(f: F) -> (R, Duration)
+    where
+        F: Fn() -> R,
+{
+    let start = SystemTime::now();
+    (
+        f(),
+        SystemTime::now()
+            .duration_since(start)
+            .unwrap_or(Duration::new(0, 0)),
+    )
+}
+
+pub fn scale() -> usize {
+    match env::var("SCALE") {
+        Ok(str) =>  usize::from_str(&str).expect(&format!("invalid SCALE value '{}'", str)),
+        Err(_) => 1
+    }
 }
 
 #[test]
@@ -319,3 +342,4 @@ fn uuidify_test() {
         &uuidify(1, 0).to_string()
     );
 }
+

@@ -1,15 +1,14 @@
+use std::borrow::Borrow;
 use std::rc::Rc;
-use std::time::{Duration, SystemTime};
 
 use fixtures::*;
-use std::borrow::Borrow;
-use stride::havoc::checker::{CheckResult, Checker};
+use stride::*;
+use stride::havoc::{checker, sim, Sublevel};
+use stride::havoc::checker::{Checker, CheckResult};
+use stride::havoc::model::{Model, name_of, rand_element};
 use stride::havoc::model::ActionResult::{Blocked, Breached, Joined, Ran};
 use stride::havoc::model::Retention::{Strong, Weak};
-use stride::havoc::model::{name_of, rand_element, Model};
 use stride::havoc::sim::{Sim, SimResult};
-use stride::havoc::{checker, sim, Sublevel};
-use stride::*;
 
 mod fixtures;
 
@@ -38,8 +37,6 @@ impl State {
         };
 
         State {
-            // candidates_broker,
-            // decisions_broker,
             cohorts,
             certifier,
         }
@@ -72,7 +69,7 @@ fn build_model<'a>(combos: &[(usize, usize)], values: &'a [i32], name: &str) -> 
 
     for (cohort_index, &(p, q)) in combos.iter().enumerate() {
         let itemset = vec![format!("item-{}", p), format!("item-{}", q)];
-        model.action(format!("initiator-{})", cohort_index), Weak, move |s, _| {
+        model.add_action(format!("initiator-{}", cohort_index), Weak, move |s, _| {
             let cohort = &s.cohorts[cohort_index];
             let (old_p, old_q) = (cohort.replica.items[p], cohort.replica.items[q]);
             let cpt_readvers = vec![old_p.1, old_q.1];
@@ -93,7 +90,7 @@ fn build_model<'a>(combos: &[(usize, usize)], values: &'a [i32], name: &str) -> 
         });
 
         let asserter = State::asserter(values);
-        model.action(format!("updater-{}", cohort_index), Weak, move |s, c| {
+        model.add_action(format!("updater-{}", cohort_index), Weak, move |s, c| {
             let cohort = &mut s.cohorts[cohort_index];
             let installable_commits = cohort.decisions.find(|decision| match decision {
                 DecisionMessage::Commit(commit) => cohort.replica.can_install_ooo(
@@ -123,7 +120,7 @@ fn build_model<'a>(combos: &[(usize, usize)], values: &'a [i32], name: &str) -> 
         });
 
         let asserter = State::asserter(values);
-        model.action(format!("replicator-{}", cohort_index), Weak, move |s, _| {
+        model.add_action(format!("replicator-{}", cohort_index), Weak, move |s, _| {
             let cohort = &mut s.cohorts[cohort_index];
             match cohort.decisions.consume() {
                 None => Blocked,
@@ -147,7 +144,7 @@ fn build_model<'a>(combos: &[(usize, usize)], values: &'a [i32], name: &str) -> 
         });
     }
 
-    model.action("certifier".into(), Weak, |s, _| {
+    model.add_action("certifier".into(), Weak, |s, _| {
         let certifier = &mut s.certifier;
         match certifier.candidates.consume() {
             None => Blocked,
@@ -157,7 +154,6 @@ fn build_model<'a>(combos: &[(usize, usize)], values: &'a [i32], name: &str) -> 
                     ver: offset as u64,
                 };
                 let outcome = certifier.examiner.assess(&candidate);
-                // log::trace!("OUTCOME {:?}", outcome);
                 let decision_message = match outcome {
                     Outcome::Commit(safepoint, _) => DecisionMessage::Commit(CommitMessage {
                         candidate,
@@ -174,7 +170,7 @@ fn build_model<'a>(combos: &[(usize, usize)], values: &'a [i32], name: &str) -> 
         }
     });
 
-    model.action("supervisor".into(), Strong, move |s, _| {
+    model.add_action("supervisor".into(), Strong, move |s, _| {
         let finished_cohorts = s
             .cohorts
             .iter()
@@ -188,19 +184,6 @@ fn build_model<'a>(combos: &[(usize, usize)], values: &'a [i32], name: &str) -> 
     });
 
     model
-}
-
-fn timed<F, R>(f: F) -> (R, Duration)
-where
-    F: Fn() -> R,
-{
-    let start = SystemTime::now();
-    (
-        f(),
-        SystemTime::now()
-            .duration_since(start)
-            .unwrap_or(Duration::new(0, 0)),
-    )
 }
 
 #[test]
@@ -262,18 +245,28 @@ fn sim_swaps_three() {
     );
 }
 
+#[test]
+#[ignore]
+fn sim_swaps_four() {
+    sim_test(
+        &[(0, 1), (1, 2), (2, 3)],
+        &[101, 103, 107, 111],
+        name_of(&sim_swaps_four),
+        1_000_000,
+    );
+}
+
 fn sim_test(combos: &[(usize, usize)], values: &[i32], name: &str, max_schedules: usize) {
     init_log();
     let model = build_model(combos, values, name);
-    let (result, elapsed) = timed(|| {
-        Sim::new(&model)
-            .with_config(
-                sim::Config::default()
-                    .with_sublevel(Sublevel::Fine)
-                    .with_max_schedules(max_schedules),
-            )
-            .check()
-    });
+    let sim = Sim::new(&model)
+        .with_config(
+            sim::Config::default()
+                .with_sublevel(Sublevel::Fine)
+                .with_max_schedules(max_schedules * scale()),
+        );
+    log::debug!("simulating model '{}' with {:?}", model.name().unwrap_or("untitled"), sim.config());
+    let (result, elapsed) = timed(|| sim.check());
     log::debug!("took {:?}", elapsed);
     assert_eq!(SimResult::Pass, result);
 }

@@ -207,7 +207,7 @@ fn dfs_two_actions_no_deadlock() {
     init_log();
     let mut model = Model::new(Lock::new).with_name(name_of(&dfs_two_actions_no_deadlock).into());
     for c in ["a", "b"] {
-        model.action(
+        model.add_action(
             String::from("test-".to_owned() + c),
             Strong,
             |s, c| {

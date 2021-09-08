@@ -111,11 +111,11 @@ impl<'a, S> Checker<'a, S> {
     }
 
     pub fn with_config(mut self, config: Config) -> Self {
-        self.config(config);
+        self.set_config(config);
         self
     }
 
-    pub fn config(&mut self, config: Config) {
+    pub fn set_config(&mut self, config: Config) {
         self.config = config;
     }
 
@@ -202,11 +202,7 @@ impl<'a, S> Checker<'a, S> {
     pub fn check(mut self) -> CheckResult {
         let sublevel = self.config.sublevel.if_trace();
         if sublevel.allows(Sublevel::Fine) {
-            let model_name = match &self.model.name {
-                None => "untitled",
-                Some(name) => &name
-            };
-            log::trace!("checking '{}' with {:?}", model_name, self.config);
+            log::trace!("checking '{}' with {:?}", self.model.name().unwrap_or("untitled"), self.config);
         }
         self.reset_run();
 

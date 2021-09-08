@@ -73,7 +73,7 @@ impl<'a, S> Model<'a, S> {
         }
     }
 
-    pub fn action<F>(&mut self, name: String, retention: Retention, action: F)
+    pub fn add_action<F>(&mut self, name: String, retention: Retention, action: F)
     where
         F: Fn(&mut S, &mut dyn Context) -> ActionResult + 'a,
     {
@@ -88,16 +88,20 @@ impl<'a, S> Model<'a, S> {
     where
         F: Fn(&mut S, &mut dyn Context) -> ActionResult + 'a,
     {
-        self.action(name, retention, action);
+        self.add_action(name, retention, action);
         self
     }
 
-    pub fn name(&mut self, name: String) {
+    pub fn name(&self) -> Option<&str> {
+        self.name.as_ref().map(|name| name.as_str())
+    }
+
+    pub fn set_name(&mut self, name: String) {
         self.name = Some(name);
     }
 
     pub fn with_name(mut self, name: String) -> Self {
-        self.name(name);
+        self.set_name(name);
         self
     }
 
