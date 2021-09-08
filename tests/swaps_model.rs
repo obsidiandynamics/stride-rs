@@ -9,6 +9,7 @@ use stride::havoc::model::{Model, name_of, rand_element};
 use stride::havoc::model::ActionResult::{Blocked, Breached, Joined, Ran};
 use stride::havoc::model::Retention::{Strong, Weak};
 use stride::havoc::sim::{Sim, SimResult};
+use std::ops::Div;
 
 mod fixtures;
 
@@ -259,14 +260,17 @@ fn sim_swaps_four() {
 fn sim_test(combos: &[(usize, usize)], values: &[i32], name: &str, max_schedules: usize) {
     init_log();
     let model = build_model(combos, values, name);
+    let max_schedules = max_schedules * scale();
     let sim = Sim::new(&model)
         .with_config(
             sim::Config::default()
                 .with_sublevel(Sublevel::Fine)
-                .with_max_schedules(max_schedules * scale()),
+                .with_max_schedules(max_schedules),
         );
     log::debug!("simulating model '{}' with {:?}", model.name().unwrap_or("untitled"), sim.config());
     let (result, elapsed) = timed(|| sim.check());
-    log::debug!("took {:?}", elapsed);
+    let per_schedule = elapsed.div(max_schedules as u32);
+    let rate_s = 1_000_000_000 as f64 / per_schedule.as_nanos() as f64;
+    log::debug!("took {:?} ({:?}/schedule, {:.3} schedules/sec)", elapsed, per_schedule, rate_s);
     assert_eq!(SimResult::Pass, result);
 }
