@@ -2,10 +2,11 @@ use std::rc::Rc;
 use std::time::{Duration, SystemTime};
 
 use fixtures::*;
+use std::borrow::Borrow;
 use stride::havoc::checker::{CheckResult, Checker};
-use stride::havoc::model::ActionResult::{Blocked, Joined, Ran, Breached};
+use stride::havoc::model::ActionResult::{Blocked, Breached, Joined, Ran};
 use stride::havoc::model::Retention::{Strong, Weak};
-use stride::havoc::model::{name_of, Model, rand_element};
+use stride::havoc::model::{name_of, rand_element, Model};
 use stride::havoc::sim::{Sim, SimResult};
 use stride::havoc::{checker, sim, Sublevel};
 use stride::*;
@@ -49,7 +50,10 @@ impl State {
         move |r| {
             let computed_product: i32 = r.items.iter().map(|(item, _)| *item).product();
             if expected_product != computed_product {
-                Some(format!("expected: {}, computed: {} for {:?}", expected_product, computed_product, r))
+                Some(format!(
+                    "expected: {}, computed: {} for {:?}",
+                    expected_product, computed_product, r
+                ))
             } else {
                 None
             }
@@ -61,104 +65,86 @@ fn init_log() {
     let _ = env_logger::builder().is_test(true).try_init();
 }
 
-fn build_model<'a>(
-    combos: &[(usize, usize)],
-    values: &'a [i32],
-    name: &str,
-) -> Model<'a, State> {
+fn build_model<'a>(combos: &[(usize, usize)], values: &'a [i32], name: &str) -> Model<'a, State> {
     let num_cohorts = combos.len();
     let expect_txns = num_cohorts;
     let mut model = Model::new(move || State::new(num_cohorts, values)).with_name(name.into());
 
     for (cohort_index, &(p, q)) in combos.iter().enumerate() {
         let itemset = vec![format!("item-{}", p), format!("item-{}", q)];
-        model.action(
-            format!("initiator-{})", cohort_index),
-            Weak,
-            move |s, _| {
-                let cohort = &s.cohorts[cohort_index];
-                let (old_p, old_q) = (cohort.replica.items[p], cohort.replica.items[q]);
-                let cpt_readvers = vec![old_p.1, old_q.1];
-                let cpt_snapshot = cohort.replica.ver;
-                let statemap = Statemap::new(vec![(p, old_q.0), (q, old_p.0)]);
-                let (readvers, snapshot) = Record::compress(cpt_readvers, cpt_snapshot);
-                cohort.candidates.produce(Rc::new(CandidateMessage {
-                    rec: Record {
-                        xid: uuidify(cohort_index, 0),
-                        readset: itemset.clone(),
-                        writeset: itemset.clone(),
-                        readvers,
-                        snapshot
-                    },
-                    statemap,
-                }));
-                Joined
-            },
-        );
+        model.action(format!("initiator-{})", cohort_index), Weak, move |s, _| {
+            let cohort = &s.cohorts[cohort_index];
+            let (old_p, old_q) = (cohort.replica.items[p], cohort.replica.items[q]);
+            let cpt_readvers = vec![old_p.1, old_q.1];
+            let cpt_snapshot = cohort.replica.ver;
+            let statemap = Statemap::new(vec![(p, old_q.0), (q, old_p.0)]);
+            let (readvers, snapshot) = Record::compress(cpt_readvers, cpt_snapshot);
+            cohort.candidates.produce(Rc::new(CandidateMessage {
+                rec: Record {
+                    xid: uuidify(cohort_index, 0),
+                    readset: itemset.clone(),
+                    writeset: itemset.clone(),
+                    readvers,
+                    snapshot,
+                },
+                statemap,
+            }));
+            Joined
+        });
 
         let asserter = State::asserter(values);
-        model.action(
-            format!("updater-{}", cohort_index),
-            Weak,
-            move |s, c| {
-                let cohort = &mut s.cohorts[cohort_index];
-                let installable_commits = cohort.decisions.find(|decision| {
-                    match decision.outcome {
-                        Outcome::Commit(safepoint, _) => {
-                            let statemap = decision.statemap.as_ref().unwrap();
-                            cohort.replica.can_install_ooo(statemap, safepoint, decision.candidate.ver)
-                        }
-                        Outcome::Abort(_, _) => false
-                    }
-                });
+        model.action(format!("updater-{}", cohort_index), Weak, move |s, c| {
+            let cohort = &mut s.cohorts[cohort_index];
+            let installable_commits = cohort.decisions.find(|decision| match decision {
+                DecisionMessage::Commit(commit) => cohort.replica.can_install_ooo(
+                    &commit.statemap,
+                    commit.safepoint,
+                    commit.candidate.ver,
+                ),
+                DecisionMessage::Abort(_) => false,
+            });
 
-                if ! installable_commits.is_empty() {
-                    log::trace!("Installable {:?}", installable_commits);
-                    let (_, commit) = rand_element(c, &installable_commits);
-                    match commit.outcome {
-                        Outcome::Commit(safepoint, _) => {
-                            let statemap = commit.statemap.as_ref().unwrap();
-                            cohort.replica.install_ooo(statemap, safepoint, commit.candidate.ver);
+            if !installable_commits.is_empty() {
+                log::trace!("Installable {:?}", installable_commits);
+                let (_, commit) = rand_element(c, &installable_commits);
+                let commit = commit.as_commit().unwrap();
+                cohort.replica.install_ooo(
+                    &commit.statemap,
+                    commit.safepoint,
+                    commit.candidate.ver,
+                );
+                if let Some(error) = asserter(&cohort.replica) {
+                    return Breached(error);
+                }
+                Ran
+            } else {
+                Blocked
+            }
+        });
+
+        let asserter = State::asserter(values);
+        model.action(format!("replicator-{}", cohort_index), Weak, move |s, _| {
+            let cohort = &mut s.cohorts[cohort_index];
+            match cohort.decisions.consume() {
+                None => Blocked,
+                Some((_, decision)) => {
+                    match decision.borrow() {
+                        DecisionMessage::Commit(commit) => {
+                            cohort
+                                .replica
+                                .install_ser(&commit.statemap, commit.candidate.ver);
                             if let Some(error) = asserter(&cohort.replica) {
                                 return Breached(error);
                             }
                         }
-                        Outcome::Abort(_, _) => unreachable!()
+                        DecisionMessage::Abort(abort) => {
+                            log::trace!("ABORTED {:?}", abort.reason);
+                        }
                     }
                     Ran
-                } else {
-                    Blocked
                 }
-            },
-        );
-
-        let asserter = State::asserter(values);
-        model.action(
-            format!("replicator-{}", cohort_index),
-            Weak,
-            move |s, _| {
-                let cohort = &mut s.cohorts[cohort_index];
-                match cohort.decisions.consume() {
-                    None => Blocked,
-                    Some((_, decision)) => {
-                        match &decision.outcome {
-                            Outcome::Commit(_, _) => {
-                                let statemap =
-                                    decision.statemap.as_ref().expect("no statemap in commit");
-                                cohort.replica.install_ser(statemap, decision.candidate.ver);
-                                if let Some(error) = asserter(&cohort.replica) {
-                                    return Breached(error);
-                                }
-                            }
-                            Outcome::Abort(reason, _) => {
-                                log::trace!("ABORTED {:?}", reason);
-                            }
-                        }
-                        Ran
-                    }
-                }
-            },
-        );
+            }
+        });
     }
 
     model.action("certifier".into(), Weak, |s, _| {
@@ -172,15 +158,17 @@ fn build_model<'a>(
                 };
                 let outcome = certifier.examiner.assess(&candidate);
                 // log::trace!("OUTCOME {:?}", outcome);
-                let statemap = match outcome {
-                    Outcome::Commit(_, _) => Some(candidate_message.statemap.clone()),
-                    Outcome::Abort(_, _) => None,
+                let decision_message = match outcome {
+                    Outcome::Commit(safepoint, _) => DecisionMessage::Commit(CommitMessage {
+                        candidate,
+                        safepoint,
+                        statemap: candidate_message.statemap.clone(),
+                    }),
+                    Outcome::Abort(reason, _) => {
+                        DecisionMessage::Abort(AbortMessage { candidate, reason })
+                    }
                 };
-                certifier.decisions.produce(Rc::new(DecisionMessage {
-                    candidate,
-                    outcome,
-                    statemap,
-                }));
+                certifier.decisions.produce(Rc::new(decision_message));
                 Ran
             }
         }
@@ -203,11 +191,16 @@ fn build_model<'a>(
 }
 
 fn timed<F, R>(f: F) -> (R, Duration)
-    where
-        F: Fn() -> R,
+where
+    F: Fn() -> R,
 {
     let start = SystemTime::now();
-    (f(), SystemTime::now().duration_since(start).unwrap_or(Duration::new(0, 0)))
+    (
+        f(),
+        SystemTime::now()
+            .duration_since(start)
+            .unwrap_or(Duration::new(0, 0)),
+    )
 }
 
 #[test]
@@ -250,7 +243,12 @@ fn sim_swaps_one() {
 
 #[test]
 fn sim_swaps_two() {
-    sim_test(&[(0, 1), (1, 2)], &[101, 103, 107], name_of(&sim_swaps_two), 100);
+    sim_test(
+        &[(0, 1), (1, 2)],
+        &[101, 103, 107],
+        name_of(&sim_swaps_two),
+        100,
+    );
 }
 
 #[test]

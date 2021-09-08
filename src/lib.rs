@@ -1,11 +1,13 @@
-pub mod havoc;
+use std::collections::hash_map::Entry;
+
+use rustc_hash::FxHashMap;
+use uuid::Uuid;
 
 use crate::AbortReason::{Antidependency, Staleness};
 use crate::Discord::{Assertive, Permissive};
 use crate::Outcome::{Abort, Commit};
-use rustc_hash::FxHashMap;
-use std::collections::hash_map::Entry;
-use uuid::Uuid;
+
+pub mod havoc;
 
 //TODO this doesn't need to be part of the examiner
 #[derive(Debug)]
@@ -21,10 +23,38 @@ pub struct CandidateMessage<S: Clone> {
 }
 
 #[derive(Debug)]
-pub struct DecisionMessage<S: Clone> {
+pub enum DecisionMessage<S: Clone> {
+    Commit(CommitMessage<S>),
+    Abort(AbortMessage)
+}
+
+impl<S: Clone> DecisionMessage<S> {
+    pub fn as_commit(&self) -> Option<&CommitMessage<S>> {
+        match self {
+            DecisionMessage::Commit(message) => Some(message),
+            DecisionMessage::Abort(_) => None
+        }
+    }
+
+    pub fn as_abort(&self) -> Option<&AbortMessage> {
+        match self {
+            DecisionMessage::Commit(_) => None,
+            DecisionMessage::Abort(message) => Some(message)
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct CommitMessage<S: Clone> {
     pub candidate: Candidate,
-    pub outcome: Outcome,
-    pub statemap: Option<S>,
+    pub safepoint: u64,
+    pub statemap: S
+}
+
+#[derive(Debug)]
+pub struct AbortMessage {
+    pub candidate: Candidate,
+    pub reason: AbortReason
 }
 
 #[derive(Debug)]
