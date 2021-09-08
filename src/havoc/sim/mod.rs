@@ -78,6 +78,10 @@ impl<S> Context for SimContext<'_, S> {
         self.trace.push_rand(rand);
         rand
     }
+
+    fn trace(&self) -> &Trace {
+        self.trace
+    }
 }
 
 #[inline]

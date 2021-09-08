@@ -23,6 +23,8 @@ pub trait Context {
     fn name(&self) -> &str;
 
     fn rand(&mut self) -> u64;
+
+    fn trace(&self) -> &Trace;
 }
 
 pub(crate) struct ActionEntry<'a, S> {
