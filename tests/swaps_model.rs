@@ -3,9 +3,9 @@ use std::time::{Duration, SystemTime};
 
 use fixtures::*;
 use stride::havoc::checker::{CheckResult, Checker};
-use stride::havoc::model::ActionResult::{Blocked, Joined, Ran};
+use stride::havoc::model::ActionResult::{Blocked, Joined, Ran, Breached};
 use stride::havoc::model::Retention::{Strong, Weak};
-use stride::havoc::model::{name_of, Model};
+use stride::havoc::model::{name_of, Model, rand_element};
 use stride::havoc::sim::{Sim, SimResult};
 use stride::havoc::{checker, sim, Sublevel};
 use stride::*;
@@ -44,11 +44,15 @@ impl State {
         }
     }
 
-    fn asserter(values: &[i32]) -> impl Fn(&Replica) -> bool {
+    fn asserter(values: &[i32]) -> impl Fn(&Replica) -> Option<String> {
         let expected_product: i32 = values.iter().product();
         move |r| {
             let computed_product: i32 = r.items.iter().map(|(item, _)| *item).product();
-            expected_product == computed_product
+            if expected_product != computed_product {
+                Some(format!("expected: {}, computed: {} for {:?}", expected_product, computed_product, r))
+            } else {
+                None
+            }
         }
     }
 }
@@ -59,12 +63,12 @@ fn init_log() {
 
 #[test]
 fn dfs_swaps_one() {
-    dfs_test(&[(0, 1)], &[5, 7], name_of(&dfs_swaps_one));
+    dfs_test(&[(0, 1)], &[101, 103], name_of(&dfs_swaps_one));
 }
 
 #[test]
 fn dfs_swaps_two() {
-    dfs_test(&[(0, 1), (1, 2)], &[3, 5, 7], name_of(&dfs_swaps_two));
+    dfs_test(&[(0, 1), (1, 2)], &[101, 103, 107], name_of(&dfs_swaps_two));
 }
 
 #[test]
@@ -72,7 +76,7 @@ fn dfs_swaps_two() {
 fn dfs_swaps_three() {
     dfs_test(
         &[(0, 1), (1, 2), (0, 2)],
-        &[3, 5, 7],
+        &[101, 103, 107],
         name_of(&dfs_swaps_three),
     );
 }
@@ -113,7 +117,43 @@ fn build_model<'a>(
 
         let asserter = State::asserter(values);
         model.action(
-            format!("replicator-{}-({}-{})", cohort_index, p, q),
+            format!("updater-{}", cohort_index),
+            Weak,
+            move |s, c| {
+                let cohort = &mut s.cohorts[cohort_index];
+                let installable_commits = cohort.decisions.find(|decision| {
+                    match decision.outcome {
+                        Outcome::Commit(safepoint, _) => {
+                            let statemap = decision.statemap.as_ref().unwrap();
+                            cohort.replica.can_install_ooo(statemap, safepoint, decision.candidate.ver)
+                        }
+                        Outcome::Abort(_, _) => false
+                    }
+                });
+
+                if ! installable_commits.is_empty() {
+                    println!("Installable {:?}", installable_commits);
+                    let (_, commit) = rand_element(c, &installable_commits);
+                    match commit.outcome {
+                        Outcome::Commit(safepoint, _) => {
+                            let statemap = commit.statemap.as_ref().unwrap();
+                            cohort.replica.install_ooo(statemap, safepoint, commit.candidate.ver);
+                            if let Some(error) = asserter(&cohort.replica) {
+                                return Breached(error);
+                            }
+                        }
+                        Outcome::Abort(_, _) => unreachable!()
+                    }
+                    Ran
+                } else {
+                    Blocked
+                }
+            },
+        );
+
+        let asserter = State::asserter(values);
+        model.action(
+            format!("replicator-{}", cohort_index),
             Weak,
             move |s, _| {
                 let cohort = &mut s.cohorts[cohort_index];
@@ -125,7 +165,9 @@ fn build_model<'a>(
                                 let statemap =
                                     decision.statemap.as_ref().expect("no statemap in commit");
                                 cohort.replica.install_ser(statemap, decision.candidate.ver);
-                                assert!(asserter(&cohort.replica));
+                                if let Some(error) = asserter(&cohort.replica) {
+                                    return Breached(error);
+                                }
                             }
                             Outcome::Abort(reason, _) => {
                                 log::trace!("ABORTED {:?}", reason);
@@ -193,12 +235,12 @@ fn dfs_test(combos: &[(usize, usize)], values: &[i32], name: &str) {
 
 #[test]
 fn sim_swaps_one() {
-    sim_test(&[(0, 1)], &[5, 7], name_of(&sim_swaps_one), 10);
+    sim_test(&[(0, 1)], &[101, 103], name_of(&sim_swaps_one), 10);
 }
 
 #[test]
 fn sim_swaps_two() {
-    sim_test(&[(0, 1), (1, 2)], &[3, 5, 7], name_of(&sim_swaps_two), 100);
+    sim_test(&[(0, 1), (1, 2)], &[101, 103, 107], name_of(&sim_swaps_two), 100);
 }
 
 #[test]
@@ -206,7 +248,7 @@ fn sim_swaps_two() {
 fn sim_swaps_three() {
     sim_test(
         &[(0, 1), (1, 2), (0, 2)],
-        &[3, 5, 7],
+        &[101, 103, 107],
         name_of(&sim_swaps_three),
         1_000_000,
     );

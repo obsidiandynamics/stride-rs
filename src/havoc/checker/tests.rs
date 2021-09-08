@@ -330,7 +330,7 @@ fn dfs_rand() {
     let model = Model::new(Counter::new)
         .with_name(name_of(&dfs_rand).into())
         .with_action("test".into(), Strong, |s, c| {
-            let random_number = c.rand();
+            let random_number = c.rand(u64::MAX);
             generated.borrow_mut().insert(random_number);
             match s.inc(c.name().into()) {
                 NUM_RUNS => Joined,

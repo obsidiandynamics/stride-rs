@@ -46,6 +46,18 @@ impl Replica {
         }
     }
 
+    pub fn can_install_ooo(&self, statemap: &Statemap, safepoint: u64, ver: u64) -> bool {
+        if self.ver >= safepoint && ver > self.ver {
+            for &(change_item, _) in &statemap.changes {
+                let &(_, existing_ver) = &self.items[change_item];
+                if ver > existing_ver {
+                    return true
+                }
+            }
+        }
+        false
+    }
+
     fn install_items(&mut self, statemap: &Statemap, ver: u64) {
         for &(change_item, change_value) in &statemap.changes {
             let existing = &mut self.items[change_item];
@@ -174,16 +186,19 @@ fn replica_install_ooo() {
     };
 
     // non-empty statemap at the same safepoint and same version -- no change expected
+    assert!(!replica.can_install_ooo(&Statemap::new(vec![(0, 11)]), 5, 5));
     replica.install_ooo(&Statemap::new(vec![(0, 11)]), 5, 5);
     assert_eq!(vec![(10, 5), (20, 5), (30, 5)], replica.items);
     assert_eq!(5, replica.ver);
 
     // non-empty statemap at the greater safepoint and greater version -- no change expected
+    assert!(!replica.can_install_ooo(&Statemap::new(vec![(0, 11)]), 6, 6));
     replica.install_ooo(&Statemap::new(vec![(0, 11)]), 6, 6);
     assert_eq!(vec![(10, 5), (20, 5), (30, 5)], replica.items);
     assert_eq!(5, replica.ver);
 
     // non-empty statemap at the same safepoint and greater version -- expect changes
+    assert!(replica.can_install_ooo(&Statemap::new(vec![(0, 11)]), 5, 6));
     replica.install_ooo(&Statemap::new(vec![(0, 11)]), 5, 6);
     assert_eq!(vec![(11, 6), (20, 5), (30, 5)], replica.items);
     assert_eq!(5, replica.ver);

@@ -1,6 +1,6 @@
 use std::hash::Hasher;
 
-use rand::{Rng, RngCore, SeedableRng};
+use rand::{Rng, SeedableRng};
 use rustc_hash::FxHashSet;
 
 use crate::havoc::model::{ActionResult, Context, Model, Trace, Call};
@@ -12,8 +12,15 @@ use ActionResult::{Breached, Joined, Blocked, Ran};
 #[derive(PartialEq, Debug, Eq, Hash)]
 pub enum SimResult {
     Pass,
-    Fail(String),
+    Fail(SimFail),
     Deadlock,
+}
+
+#[derive(PartialEq, Debug, Eq, Hash)]
+pub struct SimFail {
+    error: String,
+    trace: Trace,
+    schedule: usize
 }
 
 #[derive(Debug)]
@@ -72,9 +79,9 @@ impl<S> Context for SimContext<'_, S> {
         &self.model.actions[self.trace.peek().action].name
     }
 
-    fn rand(&mut self) -> u64 {
+    fn rand(&mut self, limit:  u64) -> u64 {
         let hash = hash(self.trace, self.schedule);
-        let rand = rand::rngs::StdRng::seed_from_u64(hash).next_u64();
+        let rand = rand::rngs::StdRng::seed_from_u64(hash).gen_range(0..limit);
         self.trace.push_rand(rand);
         rand
     }
@@ -239,7 +246,11 @@ impl<'a, S> Sim<'a, S> {
                         if sublevel.allows(Sublevel::Fine) {
                             log::trace!("      invariant breached: {}", error);
                         }
-                        return Fail(error)
+                        return Fail(SimFail {
+                            error,
+                            trace: trace.clone(),
+                            schedule: stats.completed
+                        })
                     }
                 }
             }

@@ -361,7 +361,8 @@ fn sim_rand() {
     let model = Model::new(Counter::new)
         .with_name(name_of(&sim_rand).into())
         .with_action("test".into(), Strong, |s, c| {
-            let random_number = c.rand();
+            let random_number = c.rand(u64::MAX);
+            assert_eq!(vec![random_number], c.trace().peek().rands);
             generated.borrow_mut().insert(random_number);
             match s.inc(c.name().into()) {
                 NUM_RUNS => Joined,
@@ -388,6 +389,10 @@ fn sim_one_shot_breach() {
         });
 
     let sim = Sim::new(&model).with_config(default_config().with_max_schedules(3));
-    assert_eq!(Fail("some invariant".into()), sim.check());
+    assert_eq!(Fail(SimFail {
+        error: "some invariant".to_string(),
+        trace: Trace::of(&[Call::of(0, &[])]),
+        schedule: 0
+    }.into()), sim.check());
     assert_eq!(1, run_count.get());
 }

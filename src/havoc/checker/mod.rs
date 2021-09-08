@@ -1,14 +1,12 @@
 use std::hash::Hasher;
 
-use rand::{SeedableRng, RngCore};
+use rand::{SeedableRng, Rng};
 use rustc_hash::FxHashSet;
 
-use crate::havoc::checker::CheckResult::{Deadlocked, Flawless, Flawed};
+use crate::havoc::checker::CheckResult::{Deadlocked, Flawed, Flawless};
 use crate::havoc::model::{ActionResult, Context, Model, Trace};
 use crate::havoc::model::Retention::Strong;
 use crate::havoc::Sublevel;
-use std::cell::{RefCell, Ref};
-use std::ops::Deref;
 
 #[derive(PartialEq, Debug, Eq, Hash)]
 pub enum CheckResult {
@@ -17,38 +15,9 @@ pub enum CheckResult {
     Deadlocked,
 }
 
-struct LazyTrace {
-    cell: RefCell<Option<Trace>>
-}
-
-impl LazyTrace {
-    fn deref<'a>(&'a self) -> impl Deref<Target = Trace> + 'a {
-        // let x = self.cell.borrow();
-        // x
-
-        let x = self.cell.borrow();
-        Ref::map(x, |x| {
-            let w = x.as_ref();
-            let y = w.unwrap();
-            y
-        })
-        // Ref::map(x, |x| &x.unwrap())
-    }
-}
-
 struct CheckContext<'a, S> {
     name: &'a str,
     checker: &'a Checker<'a, S>,
-    lazy_trace: RefCell<Option<Trace>>
-}
-
-impl<'a, S> CheckContext<'a, S> {
-    fn t(&'a self) -> Ref<Option<Trace>> {
-        *self.lazy_trace.borrow_mut() = Some(Trace::new());
-        self.lazy_trace.borrow()
-        // *self.lazy_trace.borrow_mut() = Some(Trace::new());
-        // (*self.lazy_trace.borrow()).as_ref().unwrap()
-    }
 }
 
 impl<S> Context for CheckContext<'_, S> {
@@ -56,16 +25,12 @@ impl<S> Context for CheckContext<'_, S> {
         self.name
     }
 
-    fn rand(&mut self) -> u64 {
-        rand::rngs::StdRng::seed_from_u64(self.checker.hash()).next_u64()
+    fn rand(&mut self, limit: u64) -> u64 {
+        rand::rngs::StdRng::seed_from_u64(self.checker.hash()).gen_range(0..limit)
     }
 
     fn trace(&self) -> &Trace {
         todo!()
-        // let x = self.lazy_trace.borrow();
-        // x.as_ref().unwrap()
-        // *self.lazy_trace.borrow_mut() = Some(Trace::new());
-        // (*self.lazy_trace.borrow()).as_ref().unwrap()
     }
 }
 
@@ -298,7 +263,6 @@ impl<'a, S> Checker<'a, S> {
             let mut context = CheckContext {
                 name: &action_entry.name,
                 checker: &self,
-                lazy_trace: RefCell::new(None)
             };
             let result = (*action_entry.action)(&mut state, &mut context);
 

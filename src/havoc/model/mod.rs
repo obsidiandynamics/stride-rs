@@ -19,10 +19,34 @@ pub enum Retention {
     Weak,
 }
 
+// pub struct LazyTrace {
+//     cell: RefCell<Option<Trace>>
+// }
+//
+// impl LazyTrace {
+//     pub fn new() -> Self {
+//         LazyTrace { cell: RefCell::new(None) }
+//     }
+//
+//     pub fn borrow<'a>(&'a self) -> impl Deref<Target = Trace> + 'a {
+//         // let x = self.cell.borrow();
+//         // x
+//         Ref::
+//         let x = self.cell.borrow();
+//         Ref::map(x, |x| x.as_ref().unwrap())
+//         // Ref::map(x, |x| &x.unwrap())
+//     }
+// }
+
+pub fn rand_element<'a, T>(c: &mut dyn Context, slice: &'a [T]) -> &'a T {
+    let rand = c.rand(slice.len() as u64);
+    &slice[rand as usize]
+}
+
 pub trait Context {
     fn name(&self) -> &str;
 
-    fn rand(&mut self) -> u64;
+    fn rand(&mut self, limit: u64) -> u64;
 
     fn trace(&self) -> &Trace;
 }
@@ -85,15 +109,15 @@ impl<'a, S> Model<'a, S> {
     }
 }
 
-#[derive(Debug)]
-pub struct Trace {
-    pub stack: Vec<Call>
-}
-
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Call {
     pub action: usize,
     pub rands: Vec<u64>
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Trace {
+    pub stack: Vec<Call>
 }
 
 impl Trace {
@@ -101,7 +125,7 @@ impl Trace {
         Trace { stack: vec![] }
     }
 
-    pub (crate) fn peek(&self) -> &Call {
+    pub(crate) fn peek(&self) -> &Call {
         self.stack.last().unwrap()
     }
 
