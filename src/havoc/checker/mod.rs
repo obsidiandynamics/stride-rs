@@ -16,17 +16,21 @@ pub enum CheckResult {
 }
 
 struct CheckContext<'a, S> {
-    name: &'a str,
     checker: &'a Checker<'a, S>,
+    rands: Vec<u64>
 }
 
 impl<S> Context for CheckContext<'_, S> {
     fn name(&self) -> &str {
-        self.name
+        let model = self.checker.model;
+        let frame = &self.checker.stack[self.checker.depth];
+        &model.actions[frame.index].name
     }
 
     fn rand(&mut self, limit: u64) -> u64 {
-        rand::rngs::StdRng::seed_from_u64(self.checker.hash()).gen_range(0..limit)
+        let rand = rand::rngs::StdRng::seed_from_u64(self.checker.hash()).gen_range(0..limit);
+        self.rands.push(rand);
+        rand
     }
 
     fn trace(&self) -> &Trace {
@@ -89,6 +93,7 @@ struct Frame {
     index: usize,
     live_snapshot: FxHashSet<usize>,
     blocked_snapshot: FxHashSet<usize>,
+    rands: Vec<u64>
 }
 
 impl<'a, S> Checker<'a, S> {
@@ -216,6 +221,7 @@ impl<'a, S> Checker<'a, S> {
                     index: 0,
                     live_snapshot: self.live.clone(),
                     blocked_snapshot: self.blocked.clone(),
+                    rands: vec![]
                 });
             }
 
@@ -256,11 +262,15 @@ impl<'a, S> Checker<'a, S> {
             if sublevel.allows(Sublevel::Fine) {
                 log::trace!("  running {}", action_entry.name);
             }
+
             let mut context = CheckContext {
-                name: &action_entry.name,
                 checker: &self,
+                rands: vec![]
             };
             let result = (*action_entry.action)(&mut state, &mut context);
+            let rands = context.rands;
+            let top = &mut self.stack[self.depth];
+            top.rands = rands;
 
             match result {
                 ActionResult::Ran => {
@@ -274,7 +284,6 @@ impl<'a, S> Checker<'a, S> {
                     if sublevel.allows(Sublevel::Fine) {
                         log::trace!("    blocked");
                     }
-                    let top = &mut self.stack[self.depth];
                     self.blocked.insert(top.index);
 
                     if self.blocked.len() == self.live.len() {

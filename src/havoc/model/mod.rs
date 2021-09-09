@@ -159,9 +159,9 @@ pub struct PrettyTrace<'a, S> {
 
 impl<S> Display for PrettyTrace<'_, S> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        for (index, call) in self.trace.stack.iter().enumerate() {
+        for (stack_index, call) in self.trace.stack.iter().enumerate() {
             let action_entry = self.model.actions.get(call.action).ok_or(fmt::Error)?;
-            write!(f, "{: >3}: {}\n", index, &action_entry.name)?;
+            write!(f, "{: >3}: {}\n", stack_index, &action_entry.name)?;
             if call.rands.is_empty() {
                 write!(f, "      -\n")?;
             } else {

@@ -1,4 +1,5 @@
 use std::borrow::Borrow;
+use std::ops::Div;
 use std::rc::Rc;
 
 use fixtures::*;
@@ -9,7 +10,6 @@ use stride::havoc::model::{Model, name_of, rand_element};
 use stride::havoc::model::ActionResult::{Blocked, Breached, Joined, Ran};
 use stride::havoc::model::Retention::{Strong, Weak};
 use stride::havoc::sim::{Sim, SimResult};
-use std::ops::Div;
 
 mod fixtures;
 
@@ -43,14 +43,13 @@ impl State {
         }
     }
 
-    fn asserter(values: &[i32]) -> impl Fn(&Replica) -> Option<String> {
-        let expected_product: i32 = values.iter().product();
+    fn asserter(num_values: usize) -> impl Fn(&Replica) -> Option<String> {
         move |r| {
-            let computed_product: i32 = r.items.iter().map(|(item, _)| *item).product();
-            if expected_product != computed_product {
+            let computed_sum: usize = r.items.iter().map(|(item, _)| *item as usize).sum();
+            if computed_sum != 0 && computed_sum != num_values {
                 Some(format!(
-                    "expected: {}, computed: {} for {:?}",
-                    expected_product, computed_product, r
+                    "expected: 0 or {}, computed: {} for {:?}",
+                    num_values, computed_sum, r
                 ))
             } else {
                 None
@@ -63,25 +62,33 @@ fn init_log() {
     let _ = env_logger::builder().is_test(true).try_init();
 }
 
-fn build_model<'a>(combos: &[(usize, usize)], values: &'a [i32], txns_per_cohort: usize, name: &str) -> Model<'a, State> {
-    let num_cohorts = combos.len();
+fn build_model<'a>(num_values: usize, num_cohorts: usize, txns_per_cohort: usize, name: &str) -> Model<'a, State> {
     let expect_txns = num_cohorts * txns_per_cohort;
-    let mut model = Model::new(move || State::new(num_cohorts, values)).with_name(name.into());
+    // initial values are alternating 0s and 1s
+    let values: Vec<i32> = (0..num_values).map(|i| (i % 2) as i32).collect();
+    let mut model = Model::new(move || State::new(num_cohorts, &values)).with_name(name.into());
 
-    for (cohort_index, &(p, q)) in combos.iter().enumerate() {
-        let itemset = [format!("item-{}", p), format!("item-{}", q)];
+    for cohort_index in 0..num_cohorts {
+        let itemset: Vec<String> = (0..num_values).map(|i| format!("item-{}", i)).collect();
+        // each cohort is assigned a specific 'to' color
+        let target_color = (cohort_index % 2) as i32;
         model.add_action(format!("initiator-{}", cohort_index), Weak, move |s, _| {
             let cohort = &mut s.cohorts[cohort_index];
-            let ((old_p_val, old_p_ver), (old_q_val, old_q_ver)) = (cohort.replica.items[p], cohort.replica.items[q]);
-            let cpt_readvers = vec![old_p_ver, old_q_ver];
+            let readset = itemset.clone();
+            let cpt_readvers: Vec<u64> = cohort.replica.items.iter().map(|&(_, item_ver)| item_ver).collect();
             let cpt_snapshot = cohort.replica.ver;
-            let statemap = Statemap::new(vec![(p, old_q_val), (q, old_p_val)]);
+            let changes: Vec<(usize, i32)> = cohort.replica.items.iter().enumerate()
+                .filter(|(_, &(item_val, _))| item_val != target_color)
+                .map(|(item_index, _)| (item_index, target_color))
+                .collect();
+            let writeset: Vec<String> = changes.iter().map(|&(item_index, _)| itemset[item_index].clone()).collect();
             let (readvers, snapshot) = Record::compress(cpt_readvers, cpt_snapshot);
+            let statemap = Statemap::new(changes);
             cohort.candidates.produce(Rc::new(CandidateMessage {
                 rec: Record {
                     xid: uuidify(cohort_index, cohort.run),
-                    readset: itemset.to_vec(),
-                    writeset: itemset.to_vec(),
+                    readset,
+                    writeset,
                     readvers,
                     snapshot,
                 },
@@ -95,7 +102,7 @@ fn build_model<'a>(combos: &[(usize, usize)], values: &'a [i32], txns_per_cohort
             }
         });
 
-        let asserter = State::asserter(values);
+        let asserter = State::asserter(num_values);
         model.add_action(format!("updater-{}", cohort_index), Weak, move |s, c| {
             let cohort = &mut s.cohorts[cohort_index];
             let installable_commits = cohort.decisions.find(|decision| match decision {
@@ -125,7 +132,7 @@ fn build_model<'a>(combos: &[(usize, usize)], values: &'a [i32], txns_per_cohort
             }
         });
 
-        let asserter = State::asserter(values);
+        let asserter = State::asserter(num_values);
         model.add_action(format!("replicator-{}", cohort_index), Weak, move |s, _| {
             let cohort = &mut s.cohorts[cohort_index];
             match cohort.decisions.consume() {
@@ -160,6 +167,7 @@ fn build_model<'a>(combos: &[(usize, usize)], values: &'a [i32], txns_per_cohort
                     ver: offset as u64,
                 };
                 let outcome = certifier.examiner.assess(&candidate);
+                log::trace!("Certified {:?} with {:?}", candidate, outcome);
                 let decision_message = match outcome {
                     Outcome::Commit(safepoint, _) => DecisionMessage::Commit(CommitMessage {
                         candidate,
@@ -193,53 +201,53 @@ fn build_model<'a>(combos: &[(usize, usize)], values: &'a [i32], txns_per_cohort
 }
 
 #[test]
-fn dfs_swaps_1x1() {
-    dfs_test(&[(0, 1)],
-             &[101, 103],
+fn dfs_pebbles_1x1() {
+    dfs_test(2,
              1,
-             name_of(&dfs_swaps_1x1));
-}
-
-#[test]
-fn dfs_swaps_1x2() {
-    dfs_test(&[(0, 1)],
-             &[101, 103],
-             2,
-             name_of(&dfs_swaps_1x2));
-}
-
-#[test]
-#[ignore]
-fn dfs_swaps_2x1() {
-    dfs_test(&[(0, 1), (1, 2)],
-             &[101, 103, 107],
              1,
-             name_of(&dfs_swaps_2x1));
+             name_of(&dfs_pebbles_1x1));
 }
 
 #[test]
-#[ignore]
-fn dfs_swaps_2x2() {
-    dfs_test(&[(0, 1), (1, 2)],
-             &[101, 103, 107],
+fn dfs_pebbles_1x2() {
+    dfs_test(2,
+             1,
              2,
-             name_of(&dfs_swaps_2x2));
+             name_of(&dfs_pebbles_1x2));
 }
 
 #[test]
 #[ignore]
-fn dfs_swaps_3x1() {
-    dfs_test(
-        &[(0, 1), (1, 2), (0, 2)],
-        &[101, 103, 107],
-        1,
-        name_of(&dfs_swaps_3x1),
-    );
+fn dfs_pebbles_2x1() {
+    dfs_test(2,
+             2,
+             1,
+             name_of(&dfs_pebbles_2x1));
 }
 
-fn dfs_test(combos: &[(usize, usize)], values: &[i32], txns_per_cohort: usize, name: &str) {
+#[test]
+#[ignore]
+fn dfs_pebbles_2x2() {
+    dfs_test(2,
+             2,
+             2,
+             name_of(&dfs_pebbles_2x2));
+}
+
+// #[test]
+// #[ignore]
+// fn dfs_pebbles_3x1() {
+//     dfs_test(
+//         &[(0, 1), (1, 2), (0, 2)],
+//         &[101, 103, 107],
+//         1,
+//         name_of(&dfs_pebbles_3x1),
+//     );
+// }
+
+fn dfs_test(num_values: usize, num_cohorts: usize, txns_per_cohort: usize, name: &str) {
     init_log();
-    let model = build_model(combos, values, txns_per_cohort, name);
+    let model = build_model(num_values, num_cohorts, txns_per_cohort, name);
     let (result, elapsed) = timed(|| {
         Checker::new(&model)
             .with_config(checker::Config::default().with_sublevel(Sublevel::Fine))
@@ -249,105 +257,105 @@ fn dfs_test(combos: &[(usize, usize)], values: &[i32], txns_per_cohort: usize, n
     assert_eq!(CheckResult::Flawless, result);
 }
 
-#[test]
-fn sim_swaps_1x1() {
-    sim_test(&[(0, 1)],
-             &[101, 103],
-             1,
-             name_of(&sim_swaps_1x1),
-             10);
-}
-
-#[test]
-fn sim_swaps_2x1() {
-    sim_test(
-        &[(0, 1), (1, 2)],
-        &[101, 103, 107],
-        1,
-        name_of(&sim_swaps_2x1),
-        100,
-    );
-}
-
-#[test]
-fn sim_swaps_2x2() {
-    sim_test(
-        &[(0, 1), (1, 2)],
-        &[101, 103, 107],
-        2,
-        name_of(&sim_swaps_2x2),
-        100,
-    );
-}
-
-#[test]
-#[ignore]
-fn sim_swaps_3x1() {
-    sim_test(
-        &[(0, 1), (1, 2), (0, 2)],
-        &[101, 103, 107],
-        1,
-        name_of(&sim_swaps_3x1),
-        1_000_000,
-    );
-}
-
-#[test]
-#[ignore]
-fn sim_swaps_3x2() {
-    sim_test(
-        &[(0, 1), (1, 2), (0, 2)],
-        &[101, 103, 107],
-        2,
-        name_of(&sim_swaps_3x2),
-        1_000_000,
-    );
-}
-
-#[test]
-#[ignore]
-fn sim_swaps_4x1() {
-    sim_test(
-        &[(0, 1), (1, 2), (2, 3)],
-        &[101, 103, 107, 111],
-        1,
-        name_of(&sim_swaps_4x1),
-        1_000_000,
-    );
-}
-
-#[test]
-#[ignore]
-fn sim_swaps_4x2() {
-    sim_test(
-        &[(0, 1), (1, 2), (2, 3)],
-        &[101, 103, 107, 111],
-        2,
-        name_of(&sim_swaps_4x2),
-        1_000_000,
-    );
-}
-
-fn sim_test(combos: &[(usize, usize)], values: &[i32], txns_per_cohort: usize, name: &str, max_schedules: usize) {
-    init_log();
-    let model = build_model(combos, values, txns_per_cohort, name);
-    let seed = seed();
-    let max_schedules = max_schedules * scale();
-    let sim = Sim::new(&model)
-        .with_config(
-            sim::Config::default()
-                .with_sublevel(Sublevel::Fine)
-                .with_max_schedules(max_schedules),
-        )
-        .with_seed(seed);
-    log::debug!("simulating model '{}' with {:?} (seed: {})", model.name().unwrap_or("untitled"), sim.config(), seed);
-    let (result, elapsed) = timed(|| sim.check());
-    let per_schedule = elapsed.div(max_schedules as u32);
-    let rate_s = 1_000_000_000 as f64 / per_schedule.as_nanos() as f64;
-    log::debug!("took {:?} ({:?}/schedule, {:.3} schedules/sec)", elapsed, per_schedule, rate_s);
-    if let SimResult::Fail(fail) = &result {
-        let pretty_trace = fail.trace.prettify(&model);
-        log::error!("trace:\n{}", pretty_trace);
-    }
-    assert_eq!(SimResult::Pass, result);
-}
+// #[test]
+// fn sim_pebbles_1x1() {
+//     sim_test(&[(0, 1)],
+//              &[101, 103],
+//              1,
+//              name_of(&sim_pebbles_1x1),
+//              10);
+// }
+//
+// #[test]
+// fn sim_pebbles_2x1() {
+//     sim_test(
+//         &[(0, 1), (1, 2)],
+//         &[101, 103, 107],
+//         1,
+//         name_of(&sim_pebbles_2x1),
+//         100,
+//     );
+// }
+//
+// #[test]
+// fn sim_pebbles_2x2() {
+//     sim_test(
+//         &[(0, 1), (1, 2)],
+//         &[101, 103, 107],
+//         2,
+//         name_of(&sim_pebbles_2x2),
+//         100,
+//     );
+// }
+//
+// #[test]
+// #[ignore]
+// fn sim_pebbles_3x1() {
+//     sim_test(
+//         &[(0, 1), (1, 2), (0, 2)],
+//         &[101, 103, 107],
+//         1,
+//         name_of(&sim_pebbles_3x1),
+//         1_000_000,
+//     );
+// }
+//
+// #[test]
+// #[ignore]
+// fn sim_pebbles_3x2() {
+//     sim_test(
+//         &[(0, 1), (1, 2), (0, 2)],
+//         &[101, 103, 107],
+//         2,
+//         name_of(&sim_pebbles_3x2),
+//         1_000_000,
+//     );
+// }
+//
+// #[test]
+// #[ignore]
+// fn sim_pebbles_4x1() {
+//     sim_test(
+//         &[(0, 1), (1, 2), (2, 3)],
+//         &[101, 103, 107, 111],
+//         1,
+//         name_of(&sim_pebbles_4x1),
+//         1_000_000,
+//     );
+// }
+//
+// #[test]
+// #[ignore]
+// fn sim_pebbles_4x2() {
+//     sim_test(
+//         &[(0, 1), (1, 2), (2, 3)],
+//         &[101, 103, 107, 111],
+//         2,
+//         name_of(&sim_pebbles_4x2),
+//         1_000_000,
+//     );
+// }
+//
+// fn sim_test(combos: &[(usize, usize)], values: &[i32], txns_per_cohort: usize, name: &str, max_schedules: usize) {
+//     init_log();
+//     let model = build_model(combos, values, txns_per_cohort, name);
+//     let seed = seed();
+//     let max_schedules = max_schedules * scale();
+//     let sim = Sim::new(&model)
+//         .with_config(
+//             sim::Config::default()
+//                 .with_sublevel(Sublevel::Fine)
+//                 .with_max_schedules(max_schedules),
+//         )
+//         .with_seed(seed);
+//     log::debug!("simulating model '{}' with {:?} (seed: {})", model.name().unwrap_or("untitled"), sim.config(), seed);
+//     let (result, elapsed) = timed(|| sim.check());
+//     let per_schedule = elapsed.div(max_schedules as u32);
+//     let rate_s = 1_000_000_000 as f64 / per_schedule.as_nanos() as f64;
+//     log::debug!("took {:?} ({:?}/schedule, {:.3} schedules/sec)", elapsed, per_schedule, rate_s);
+//     if let SimResult::Fail(fail) = &result {
+//         let pretty_trace = fail.trace.prettify(&model);
+//         log::error!("trace:\n{}", pretty_trace);
+//     }
+//     assert_eq!(SimResult::Pass, result);
+// }

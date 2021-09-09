@@ -24,7 +24,6 @@ impl Statemap {
 #[derive(Debug)]
 pub struct Cohort {
     pub run: usize,
-    pub pending: Vec<Uuid>,
     pub replica: Replica,
     pub candidates: Stream<CandidateMessage<Statemap>>,
     pub decisions: Stream<DecisionMessage<Statemap>>,
