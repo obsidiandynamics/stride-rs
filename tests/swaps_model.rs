@@ -25,6 +25,7 @@ impl State {
         let cohorts = (0..num_cohorts)
             .into_iter()
             .map(|_| Cohort {
+                run: 0,
                 pending: vec![],
                 replica: Replica::new(&values),
                 candidates: candidates_broker.stream(),
@@ -63,31 +64,36 @@ fn init_log() {
     let _ = env_logger::builder().is_test(true).try_init();
 }
 
-fn build_model<'a>(combos: &[(usize, usize)], values: &'a [i32], name: &str) -> Model<'a, State> {
+fn build_model<'a>(combos: &[(usize, usize)], values: &'a [i32], txns_per_cohort: usize, name: &str) -> Model<'a, State> {
     let num_cohorts = combos.len();
-    let expect_txns = num_cohorts;
+    let expect_txns = num_cohorts * txns_per_cohort;
     let mut model = Model::new(move || State::new(num_cohorts, values)).with_name(name.into());
 
     for (cohort_index, &(p, q)) in combos.iter().enumerate() {
-        let itemset = vec![format!("item-{}", p), format!("item-{}", q)];
+        let itemset = [format!("item-{}", p), format!("item-{}", q)];
         model.add_action(format!("initiator-{}", cohort_index), Weak, move |s, _| {
-            let cohort = &s.cohorts[cohort_index];
-            let (old_p, old_q) = (cohort.replica.items[p], cohort.replica.items[q]);
-            let cpt_readvers = vec![old_p.1, old_q.1];
+            let cohort = &mut s.cohorts[cohort_index];
+            let ((old_p_val, old_p_ver), (old_q_val, old_q_ver)) = (cohort.replica.items[p], cohort.replica.items[q]);
+            let cpt_readvers = vec![old_p_ver, old_q_ver];
             let cpt_snapshot = cohort.replica.ver;
-            let statemap = Statemap::new(vec![(p, old_q.0), (q, old_p.0)]);
+            let statemap = Statemap::new(vec![(p, old_q_val), (q, old_p_val)]);
             let (readvers, snapshot) = Record::compress(cpt_readvers, cpt_snapshot);
             cohort.candidates.produce(Rc::new(CandidateMessage {
                 rec: Record {
-                    xid: uuidify(cohort_index, 0),
-                    readset: itemset.clone(),
-                    writeset: itemset.clone(),
+                    xid: uuidify(cohort_index, cohort.run),
+                    readset: itemset.to_vec(),
+                    writeset: itemset.to_vec(),
                     readvers,
                     snapshot,
                 },
                 statemap,
             }));
-            Joined
+            cohort.run += 1;
+            if cohort.run == txns_per_cohort {
+                Joined
+            } else {
+                Ran
+            }
         });
 
         let asserter = State::asserter(values);
@@ -188,29 +194,53 @@ fn build_model<'a>(combos: &[(usize, usize)], values: &'a [i32], name: &str) -> 
 }
 
 #[test]
-fn dfs_swaps_one() {
-    dfs_test(&[(0, 1)], &[101, 103], name_of(&dfs_swaps_one));
+fn dfs_swaps_1x1() {
+    dfs_test(&[(0, 1)],
+             &[101, 103],
+             1,
+             name_of(&dfs_swaps_1x1));
+}
+
+#[test]
+fn dfs_swaps_1x2() {
+    dfs_test(&[(0, 1)],
+             &[101, 103],
+             2,
+             name_of(&dfs_swaps_1x2));
 }
 
 #[test]
 #[ignore]
-fn dfs_swaps_two() {
-    dfs_test(&[(0, 1), (1, 2)], &[101, 103, 107], name_of(&dfs_swaps_two));
+fn dfs_swaps_2x1() {
+    dfs_test(&[(0, 1), (1, 2)],
+             &[101, 103, 107],
+             1,
+             name_of(&dfs_swaps_2x1));
 }
 
 #[test]
 #[ignore]
-fn dfs_swaps_three() {
+fn dfs_swaps_2x2() {
+    dfs_test(&[(0, 1), (1, 2)],
+             &[101, 103, 107],
+             2,
+             name_of(&dfs_swaps_2x2));
+}
+
+#[test]
+#[ignore]
+fn dfs_swaps_3x1() {
     dfs_test(
         &[(0, 1), (1, 2), (0, 2)],
         &[101, 103, 107],
-        name_of(&dfs_swaps_three),
+        1,
+        name_of(&dfs_swaps_3x1),
     );
 }
 
-fn dfs_test(combos: &[(usize, usize)], values: &[i32], name: &str) {
+fn dfs_test(combos: &[(usize, usize)], values: &[i32], txns_per_cohort: usize, name: &str) {
     init_log();
-    let model = build_model(combos, values, name);
+    let model = build_model(combos, values, txns_per_cohort, name);
     let (result, elapsed) = timed(|| {
         Checker::new(&model)
             .with_config(checker::Config::default().with_sublevel(Sublevel::Fine))
@@ -221,45 +251,87 @@ fn dfs_test(combos: &[(usize, usize)], values: &[i32], name: &str) {
 }
 
 #[test]
-fn sim_swaps_one() {
-    sim_test(&[(0, 1)], &[101, 103], name_of(&sim_swaps_one), 10);
+fn sim_swaps_1x1() {
+    sim_test(&[(0, 1)],
+             &[101, 103],
+             1,
+             name_of(&sim_swaps_1x1),
+             10);
 }
 
 #[test]
-fn sim_swaps_two() {
+fn sim_swaps_2x1() {
     sim_test(
         &[(0, 1), (1, 2)],
         &[101, 103, 107],
-        name_of(&sim_swaps_two),
+        1,
+        name_of(&sim_swaps_2x1),
+        100,
+    );
+}
+
+#[test]
+fn sim_swaps_2x2() {
+    sim_test(
+        &[(0, 1), (1, 2)],
+        &[101, 103, 107],
+        2,
+        name_of(&sim_swaps_2x2),
         100,
     );
 }
 
 #[test]
 #[ignore]
-fn sim_swaps_three() {
+fn sim_swaps_3x1() {
     sim_test(
         &[(0, 1), (1, 2), (0, 2)],
         &[101, 103, 107],
-        name_of(&sim_swaps_three),
+        1,
+        name_of(&sim_swaps_3x1),
         1_000_000,
     );
 }
 
 #[test]
 #[ignore]
-fn sim_swaps_four() {
+fn sim_swaps_3x2() {
     sim_test(
-        &[(0, 1), (1, 2), (2, 3)],
-        &[101, 103, 107, 111],
-        name_of(&sim_swaps_four),
+        &[(0, 1), (1, 2), (0, 2)],
+        &[101, 103, 107],
+        2,
+        name_of(&sim_swaps_3x2),
         1_000_000,
     );
 }
 
-fn sim_test(combos: &[(usize, usize)], values: &[i32], name: &str, max_schedules: usize) {
+#[test]
+#[ignore]
+fn sim_swaps_4x1() {
+    sim_test(
+        &[(0, 1), (1, 2), (2, 3)],
+        &[101, 103, 107, 111],
+        1,
+        name_of(&sim_swaps_4x1),
+        1_000_000,
+    );
+}
+
+#[test]
+#[ignore]
+fn sim_swaps_4x2() {
+    sim_test(
+        &[(0, 1), (1, 2), (2, 3)],
+        &[101, 103, 107, 111],
+        2,
+        name_of(&sim_swaps_4x2),
+        1_000_000,
+    );
+}
+
+fn sim_test(combos: &[(usize, usize)], values: &[i32], txns_per_cohort: usize, name: &str, max_schedules: usize) {
     init_log();
-    let model = build_model(combos, values, name);
+    let model = build_model(combos, values, txns_per_cohort, name);
     let seed = seed();
     let max_schedules = max_schedules * scale();
     let sim = Sim::new(&model)
