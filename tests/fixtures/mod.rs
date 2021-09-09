@@ -8,6 +8,7 @@ use stride::{CandidateMessage, DecisionMessage, Examiner};
 use std::time::{Duration, SystemTime};
 use std::env;
 use std::str::FromStr;
+use rand::RngCore;
 
 #[derive(Debug, Clone)]
 pub struct Statemap {
@@ -177,6 +178,17 @@ pub fn scale() -> usize {
         Err(_) => 1
     }
 }
+
+pub fn seed() -> u64 {
+    match env::var("SEED") {
+        Ok(str) =>  u64::from_str(&str).expect(&format!("invalid SEED value '{}'", str)),
+        Err(_) => rand::thread_rng().next_u64()
+    }
+}
+
+// pub fn get_env<T, D>(key: &str, def: D) -> D {
+//
+// }
 
 #[test]
 fn replica_install_items() {

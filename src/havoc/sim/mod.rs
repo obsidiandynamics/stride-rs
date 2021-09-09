@@ -146,7 +146,7 @@ impl<'a, S> Sim<'a, S> {
     pub fn check(&self) -> SimResult {
         let sublevel = self.config.sublevel.if_trace();
         if sublevel.allows(Sublevel::Fine) {
-            log::trace!("checking '{}' with {:?}", self.model.name().unwrap_or("untitled"), self.config);
+            log::trace!("checking '{}' with {:?} (seed: {})", self.model.name().unwrap_or("untitled"), self.config, self.seed);
         }
         let init_strong_count = self.model.strong_count();
         let mut live = FxHashSet::default();

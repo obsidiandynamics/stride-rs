@@ -260,14 +260,16 @@ fn sim_swaps_four() {
 fn sim_test(combos: &[(usize, usize)], values: &[i32], name: &str, max_schedules: usize) {
     init_log();
     let model = build_model(combos, values, name);
+    let seed = seed();
     let max_schedules = max_schedules * scale();
     let sim = Sim::new(&model)
         .with_config(
             sim::Config::default()
                 .with_sublevel(Sublevel::Fine)
                 .with_max_schedules(max_schedules),
-        );
-    log::debug!("simulating model '{}' with {:?}", model.name().unwrap_or("untitled"), sim.config());
+        )
+        .with_seed(seed);
+    log::debug!("simulating model '{}' with {:?} (seed: {})", model.name().unwrap_or("untitled"), sim.config(), seed);
     let (result, elapsed) = timed(|| sim.check());
     let per_schedule = elapsed.div(max_schedules as u32);
     let rate_s = 1_000_000_000 as f64 / per_schedule.as_nanos() as f64;
