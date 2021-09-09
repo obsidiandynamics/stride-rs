@@ -18,9 +18,9 @@ pub enum SimResult {
 
 #[derive(PartialEq, Debug, Eq, Hash)]
 pub struct SimFail {
-    error: String,
-    trace: Trace,
-    schedule: usize
+    pub error: String,
+    pub trace: Trace,
+    pub schedule: usize
 }
 
 #[derive(Debug)]

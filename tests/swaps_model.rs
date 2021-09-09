@@ -346,5 +346,9 @@ fn sim_test(combos: &[(usize, usize)], values: &[i32], txns_per_cohort: usize, n
     let per_schedule = elapsed.div(max_schedules as u32);
     let rate_s = 1_000_000_000 as f64 / per_schedule.as_nanos() as f64;
     log::debug!("took {:?} ({:?}/schedule, {:.3} schedules/sec)", elapsed, per_schedule, rate_s);
+    if let SimResult::Fail(fail) = &result {
+        let pretty_trace = fail.trace.prettify(&model);
+        log::error!("trace:\n{}", pretty_trace);
+    }
     assert_eq!(SimResult::Pass, result);
 }
