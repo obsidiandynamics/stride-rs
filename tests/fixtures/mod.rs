@@ -4,11 +4,11 @@ use std::rc::Rc;
 
 use uuid::Uuid;
 
-use stride::{CandidateMessage, DecisionMessage, Examiner};
-use std::time::{Duration, SystemTime};
+use rand::RngCore;
 use std::env;
 use std::str::FromStr;
-use rand::RngCore;
+use std::time::{Duration, SystemTime};
+use stride::{CandidateMessage, DecisionMessage, Examiner};
 
 #[derive(Debug, Clone)]
 pub struct Statemap {
@@ -55,7 +55,7 @@ impl Replica {
             for &(change_item, _) in &statemap.changes {
                 let &(_, existing_ver) = &self.items[change_item];
                 if ver > existing_ver {
-                    return true
+                    return true;
                 }
             }
         }
@@ -87,7 +87,7 @@ impl Replica {
 
 #[derive(Debug)]
 pub struct Broker<M> {
-    internals: Rc<RefCell<BrokerInternals<M>>>
+    internals: Rc<RefCell<BrokerInternals<M>>>,
 }
 
 #[derive(Debug)]
@@ -101,8 +101,8 @@ impl<M> Broker<M> {
         Broker {
             internals: Rc::new(RefCell::new(BrokerInternals {
                 messages: vec![],
-                base
-            }))
+                base,
+            })),
         }
     }
 
@@ -121,7 +121,10 @@ pub struct Stream<M> {
 
 impl<M> Stream<M> {
     pub fn produce(&self, message: Rc<M>) {
-        self.internals.borrow_mut().messages.push(Rc::clone(&message));
+        self.internals
+            .borrow_mut()
+            .messages
+            .push(Rc::clone(&message));
     }
 
     pub fn consume(&mut self) -> Option<(usize, Rc<M>)> {
@@ -144,7 +147,8 @@ impl<M> Stream<M> {
         let messages = &internals.messages;
         let base = internals.base;
         messages
-            .iter().enumerate()
+            .iter()
+            .enumerate()
             .filter(|&(_, m)| predicate(m.deref()))
             .map(|(i, m)| (i + base, Rc::clone(&m)))
             .collect()
@@ -160,8 +164,8 @@ pub fn uuidify(pid: usize, run: usize) -> Uuid {
 }
 
 pub fn timed<F, R>(f: F) -> (R, Duration)
-    where
-        F: Fn() -> R,
+where
+    F: Fn() -> R,
 {
     let start = SystemTime::now();
     (
@@ -173,22 +177,24 @@ pub fn timed<F, R>(f: F) -> (R, Duration)
 }
 
 pub fn scale() -> usize {
-    match env::var("SCALE") {
-        Ok(str) =>  usize::from_str(&str).expect(&format!("invalid SCALE value '{}'", str)),
-        Err(_) => 1
-    }
+    get_env::<usize, _>("SCALE", || 1)
 }
 
 pub fn seed() -> u64 {
-    match env::var("SEED") {
-        Ok(str) =>  u64::from_str(&str).expect(&format!("invalid SEED value '{}'", str)),
-        Err(_) => rand::thread_rng().next_u64()
-    }
+    get_env("SEED", || rand::thread_rng().next_u64())
 }
 
-// pub fn get_env<T, D>(key: &str, def: D) -> D {
-//
-// }
+pub fn get_env<T, D>(key: &str, def: D) -> T
+where
+    T: FromStr,
+    T::Err: std::fmt::Debug,
+    D: Fn() -> T,
+{
+    match env::var(key) {
+        Ok(str) => T::from_str(&str).expect(&format!("invalid {} value '{}'", key, str)),
+        Err(_) => def(),
+    }
+}
 
 #[test]
 fn replica_install_items() {
@@ -354,4 +360,3 @@ fn uuidify_test() {
         &uuidify(1, 0).to_string()
     );
 }
-
