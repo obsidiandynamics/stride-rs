@@ -238,12 +238,19 @@ fn dfs_test(num_values: usize, num_cohorts: usize, txns_per_cohort: usize, name:
     init_log();
     let model = build_model(num_values, num_cohorts, txns_per_cohort, name);
     let (result, elapsed) = timed(|| {
-        Checker::new(&model)
-            .with_config(checker::Config::default().with_sublevel(Sublevel::Fine))
-            .check()
+        let config = checker::Config::default().with_sublevel(Sublevel::Fine);
+        log::debug!("checking model '{}' with {:?}", model.name().unwrap_or("untitled"), config);
+        Checker::new(&model).with_config(config).check()
     });
-    log::debug!("took {:?}", elapsed);
-    assert_eq!(CheckResult::Pass, result);
+    let stats = result.stats();
+    let per_schedule = elapsed.div(stats.executed as u32);
+    let rate_s = 1_000_000_000 as f64 / per_schedule.as_nanos() as f64;
+    log::debug!("took {:?} ({:?}/schedule, {:.3} schedules/sec)", elapsed, per_schedule, rate_s);
+    if let CheckResult::Fail(fail) = &result {
+        let pretty_trace = fail.trace.prettify(&model);
+        log::error!("trace:\n{}", pretty_trace);
+    }
+    assert!(matches!(result, CheckResult::Pass(_)));
 }
 
 #[test]

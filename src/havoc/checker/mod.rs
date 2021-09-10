@@ -11,13 +11,29 @@ use std::borrow::Cow;
 
 #[derive(PartialEq, Debug, Eq, Hash)]
 pub enum CheckResult {
-    Pass,
+    Pass(CheckPass),
     Fail(CheckFail),
     Deadlock,
 }
 
+impl CheckResult {
+    pub fn stats(&self) -> &Stats {
+        match self {
+            Pass(pass) => &pass.stats,
+            Fail(fail) => &fail.stats,
+            Deadlock => unimplemented!()
+        }
+    }
+}
+
+#[derive(PartialEq, Debug, Eq, Hash)]
+pub struct CheckPass {
+    pub stats: Stats
+}
+
 #[derive(PartialEq, Debug, Eq, Hash)]
 pub struct CheckFail {
+    pub stats: Stats,
     pub error: String,
     pub trace: Trace
 }
@@ -70,12 +86,12 @@ fn build_trace(check_stack: &[Frame], depth: usize) -> Trace {
     Trace { stack }
 }
 
-#[derive(Debug)]
+#[derive(PartialEq, Debug, Eq, Hash)]
 pub struct Stats {
-    executed: usize,  // how many schedules were executed
-    completed: usize, // how many schedules ran to completion
-    deepest: usize,   // the deepest traversal (number of stack elements)
-    steps: usize,     // total number of steps undertaken (number of actions executed)
+    pub executed: usize,  // how many schedules were executed
+    pub completed: usize, // how many schedules ran to completion
+    pub deepest: usize,   // the deepest traversal (number of stack elements)
+    pub steps: usize,     // total number of steps undertaken (number of actions executed)
 }
 
 #[derive(Debug)]
@@ -135,7 +151,7 @@ impl<'a, S> Checker<'a, S> {
             stats: Stats {
                 executed: 0,
                 completed: 0,
-                deepest: 0,
+                deepest: 1,
                 steps: 0,
             },
             model,
@@ -145,6 +161,10 @@ impl<'a, S> Checker<'a, S> {
             strong_count: 0,
             blocked: Default::default(),
         }
+    }
+
+    pub fn config (&self) -> &Config {
+        &self.config
     }
 
     pub fn with_config(mut self, config: Config) -> Self {
@@ -334,7 +354,7 @@ impl<'a, S> Checker<'a, S> {
                                             self.stats
                                         );
                                     }
-                                    return Pass;
+                                    return Pass(CheckPass { stats: self.stats });
                                 }
                                 Some(s) => state = s,
                             }
@@ -367,7 +387,7 @@ impl<'a, S> Checker<'a, S> {
                                         self.stats
                                     );
                                 }
-                                return Pass;
+                                return Pass(CheckPass { stats: self.stats });
                             }
                             Some(s) => state = s,
                         }
@@ -377,7 +397,12 @@ impl<'a, S> Checker<'a, S> {
                     self.blocked.clear();
                 }
                 ActionResult::Breached(error) => {
-                    return Fail(CheckFail { error, trace: build_trace(&self.stack, self.depth)});
+                    self.stats.completed += 1;
+                    self.capture_stats();
+                    return Fail(CheckFail {
+                        stats: self.stats, error,
+                        trace: build_trace(&self.stack, self.depth)
+                    });
                 }
             }
         }

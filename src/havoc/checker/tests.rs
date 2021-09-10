@@ -33,7 +33,7 @@ fn dfs_one_shot() {
         });
 
     let checker = Checker::new(&model).with_config(default_config());
-    assert_eq!(Pass, checker.check());
+    assert!(matches!(checker.check(), Pass(_)));
     assert_eq!(1, run_count.get());
 }
 
@@ -52,7 +52,7 @@ fn dfs_two_shots() {
         });
 
     let checker = Checker::new(&model).with_config(default_config());
-    assert_eq!(Pass, checker.check());
+    assert!(matches!(checker.check(), Pass(_)));
     assert_eq!(2, run_count.get());
 }
 
@@ -73,7 +73,7 @@ fn dfs_two_actions() {
 
     let checker = Checker::new(&model).with_config(default_config());
     let result = checker.check();
-    assert_eq!(Pass, result);
+    assert!(matches!(result, Pass(_)));
     assert_eq!(2, total_runs.borrow().get("a"));
     assert_eq!(2, total_runs.borrow().get("b"));
 }
@@ -99,7 +99,7 @@ fn dfs_two_actions_conditional() {
 
     let checker = Checker::new(&model).with_config(default_config());
     let result = checker.check();
-    assert_eq!(Pass, result);
+    assert!(matches!(result, Pass(_)));
     assert_eq!(1, total_runs.borrow().get("a"));
     assert_eq!(1, total_runs.borrow().get("b"));
 }
@@ -124,7 +124,7 @@ fn dfs_two_actions_by_two() {
 
     let checker = Checker::new(&model).with_config(default_config());
     let result = checker.check();
-    assert_eq!(Pass, result);
+    assert!(matches!(result, Pass(_)));
     assert_eq!(3, total_runs.borrow().get("a"));
     assert_eq!(6, total_runs.borrow().get("b"));
 }
@@ -150,7 +150,7 @@ fn dfs_three_actions() {
 
     let checker = Checker::new(&model).with_config(default_config());
     let result = checker.check();
-    assert_eq!(Pass, result);
+    assert!(matches!(result, Pass(_)));
     assert_eq!(6, total_runs.borrow().get("a"));
     assert_eq!(6, total_runs.borrow().get("b"));
     assert_eq!(6, total_runs.borrow().get("c"));
@@ -183,7 +183,7 @@ fn dfs_three_actions_by_two() {
     assert_eq!(12, total_runs.borrow().get("a"));
     assert_eq!(12, total_runs.borrow().get("b"));
     assert_eq!(24, total_runs.borrow().get("c"));
-    assert_eq!(Pass, result);
+    assert!(matches!(result, Pass(_)));
 }
 
 #[test]
@@ -220,7 +220,7 @@ fn dfs_two_actions_no_deadlock() {
     }
 
     let checker = Checker::new(&model).with_config(default_config());
-    assert_eq!(Pass, checker.check());
+    assert!(matches!(checker.check(), Pass(_)));
 }
 
 #[test]
@@ -286,7 +286,7 @@ fn dfs_two_actions_one_weak_blocked() {
 
     let checker = Checker::new(&model).with_config(default_config());
     let result = checker.check();
-    assert_eq!(Pass, result);
+    assert!(matches!(result, Pass(_)));
     assert_eq!(1, total_runs.borrow().get("a"));
     assert_eq!(1, total_runs.borrow().get("b"));
 }
@@ -313,7 +313,7 @@ fn dfs_two_actions_one_weak_two_runs() {
 
     let checker = Checker::new(&model).with_config(default_config());
     let result = checker.check();
-    assert_eq!(Pass, result);
+    assert!(matches!(result, Pass(_)));
     assert_eq!(3, total_runs.borrow().get("a"));
     assert_eq!(3, total_runs.borrow().get("b"));
 }
@@ -351,17 +351,11 @@ fn dfs_rand() {
             _ => Ran,
         }
     });
-    assert_eq!(
-        Pass,
-        Checker::new(&model).with_config(default_config()).check()
-    );
-    assert_eq!(NUM_RUNS * 2, generated.borrow().len() as i64);
+
+    assert!(matches!(Checker::new(&model).with_config(default_config()).check(), Pass(_)));
 
     // repeat run should yield the same random numbers
-    assert_eq!(
-        Pass,
-        Checker::new(&model).with_config(default_config()).check()
-    );
+    assert!(matches!(Checker::new(&model).with_config(default_config()).check(), Pass(_)));
     assert_eq!(NUM_RUNS * 2, generated.borrow().len() as i64);
 }
 
@@ -380,6 +374,12 @@ fn dfs_one_shot_breach() {
     assert_eq!(
         Fail(
             CheckFail {
+                stats: Stats {
+                    executed: 1,
+                    completed: 1,
+                    deepest: 1,
+                    steps: 1
+                },
                 error: "some invariant".to_string(),
                 trace: Trace::of(&[Call::of(0, &[])]),
             }
