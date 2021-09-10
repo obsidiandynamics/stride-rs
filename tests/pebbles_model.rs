@@ -234,17 +234,6 @@ fn dfs_pebbles_2x2() {
              name_of(&dfs_pebbles_2x2));
 }
 
-// #[test]
-// #[ignore]
-// fn dfs_pebbles_3x1() {
-//     dfs_test(
-//         &[(0, 1), (1, 2), (0, 2)],
-//         &[101, 103, 107],
-//         1,
-//         name_of(&dfs_pebbles_3x1),
-//     );
-// }
-
 fn dfs_test(num_values: usize, num_cohorts: usize, txns_per_cohort: usize, name: &str) {
     init_log();
     let model = build_model(num_values, num_cohorts, txns_per_cohort, name);
@@ -257,105 +246,105 @@ fn dfs_test(num_values: usize, num_cohorts: usize, txns_per_cohort: usize, name:
     assert_eq!(CheckResult::Pass, result);
 }
 
-// #[test]
-// fn sim_pebbles_1x1() {
-//     sim_test(&[(0, 1)],
-//              &[101, 103],
-//              1,
-//              name_of(&sim_pebbles_1x1),
-//              10);
-// }
-//
-// #[test]
-// fn sim_pebbles_2x1() {
-//     sim_test(
-//         &[(0, 1), (1, 2)],
-//         &[101, 103, 107],
-//         1,
-//         name_of(&sim_pebbles_2x1),
-//         100,
-//     );
-// }
-//
-// #[test]
-// fn sim_pebbles_2x2() {
-//     sim_test(
-//         &[(0, 1), (1, 2)],
-//         &[101, 103, 107],
-//         2,
-//         name_of(&sim_pebbles_2x2),
-//         100,
-//     );
-// }
-//
-// #[test]
-// #[ignore]
-// fn sim_pebbles_3x1() {
-//     sim_test(
-//         &[(0, 1), (1, 2), (0, 2)],
-//         &[101, 103, 107],
-//         1,
-//         name_of(&sim_pebbles_3x1),
-//         1_000_000,
-//     );
-// }
-//
-// #[test]
-// #[ignore]
-// fn sim_pebbles_3x2() {
-//     sim_test(
-//         &[(0, 1), (1, 2), (0, 2)],
-//         &[101, 103, 107],
-//         2,
-//         name_of(&sim_pebbles_3x2),
-//         1_000_000,
-//     );
-// }
-//
-// #[test]
-// #[ignore]
-// fn sim_pebbles_4x1() {
-//     sim_test(
-//         &[(0, 1), (1, 2), (2, 3)],
-//         &[101, 103, 107, 111],
-//         1,
-//         name_of(&sim_pebbles_4x1),
-//         1_000_000,
-//     );
-// }
-//
-// #[test]
-// #[ignore]
-// fn sim_pebbles_4x2() {
-//     sim_test(
-//         &[(0, 1), (1, 2), (2, 3)],
-//         &[101, 103, 107, 111],
-//         2,
-//         name_of(&sim_pebbles_4x2),
-//         1_000_000,
-//     );
-// }
-//
-// fn sim_test(combos: &[(usize, usize)], values: &[i32], txns_per_cohort: usize, name: &str, max_schedules: usize) {
-//     init_log();
-//     let model = build_model(combos, values, txns_per_cohort, name);
-//     let seed = seed();
-//     let max_schedules = max_schedules * scale();
-//     let sim = Sim::new(&model)
-//         .with_config(
-//             sim::Config::default()
-//                 .with_sublevel(Sublevel::Fine)
-//                 .with_max_schedules(max_schedules),
-//         )
-//         .with_seed(seed);
-//     log::debug!("simulating model '{}' with {:?} (seed: {})", model.name().unwrap_or("untitled"), sim.config(), seed);
-//     let (result, elapsed) = timed(|| sim.check());
-//     let per_schedule = elapsed.div(max_schedules as u32);
-//     let rate_s = 1_000_000_000 as f64 / per_schedule.as_nanos() as f64;
-//     log::debug!("took {:?} ({:?}/schedule, {:.3} schedules/sec)", elapsed, per_schedule, rate_s);
-//     if let SimResult::Fail(fail) = &result {
-//         let pretty_trace = fail.trace.prettify(&model);
-//         log::error!("trace:\n{}", pretty_trace);
-//     }
-//     assert_eq!(SimResult::Pass, result);
-// }
+#[test]
+fn sim_pebbles_1x1() {
+    sim_test(2,
+             1,
+             1,
+             name_of(&sim_pebbles_1x1),
+             10);
+}
+
+#[test]
+fn sim_pebbles_2x1() {
+    sim_test(
+        2,
+        2,
+        1,
+        name_of(&sim_pebbles_2x1),
+        100,
+    );
+}
+
+#[test]
+fn sim_pebbles_2x2() {
+    sim_test(
+        2,
+        2,
+        2,
+        name_of(&sim_pebbles_2x2),
+        100,
+    );
+}
+
+#[test]
+#[ignore]
+fn sim_pebbles_3x1() {
+    sim_test(
+        2,
+        3,
+        1,
+        name_of(&sim_pebbles_3x1),
+        1_000_000,
+    );
+}
+
+#[test]
+#[ignore]
+fn sim_pebbles_3x2() {
+    sim_test(
+        2,
+        3,
+        2,
+        name_of(&sim_pebbles_3x2),
+        1_000_000,
+    );
+}
+
+#[test]
+#[ignore]
+fn sim_pebbles_4x1() {
+    sim_test(
+        2,
+        4,
+        1,
+        name_of(&sim_pebbles_4x1),
+        1_000_000,
+    );
+}
+
+#[test]
+#[ignore]
+fn sim_pebbles_4x2() {
+    sim_test(
+        2,
+        4,
+        2,
+        name_of(&sim_pebbles_4x2),
+        1_000_000,
+    );
+}
+
+fn sim_test(num_values: usize, num_cohorts: usize, txns_per_cohort: usize, name: &str, max_schedules: usize) {
+    init_log();
+    let model = build_model(num_values, num_cohorts, txns_per_cohort, name);
+    let seed = seed();
+    let max_schedules = max_schedules * scale();
+    let sim = Sim::new(&model)
+        .with_config(
+            sim::Config::default()
+                .with_sublevel(Sublevel::Fine)
+                .with_max_schedules(max_schedules),
+        )
+        .with_seed(seed);
+    log::debug!("simulating model '{}' with {:?} (seed: {})", model.name().unwrap_or("untitled"), sim.config(), seed);
+    let (result, elapsed) = timed(|| sim.check());
+    let per_schedule = elapsed.div(max_schedules as u32);
+    let rate_s = 1_000_000_000 as f64 / per_schedule.as_nanos() as f64;
+    log::debug!("took {:?} ({:?}/schedule, {:.3} schedules/sec)", elapsed, per_schedule, rate_s);
+    if let SimResult::Fail(fail) = &result {
+        let pretty_trace = fail.trace.prettify(&model);
+        log::error!("trace:\n{}", pretty_trace);
+    }
+    assert_eq!(SimResult::Pass, result);
+}
