@@ -195,7 +195,10 @@ fn sim_one_shot_deadlock() {
         });
 
     let sim = Sim::new(&model).with_config(default_config());
-    assert_eq!(Deadlock, sim.check());
+    assert_eq!(Deadlock(DeadlockResult {
+        trace: Trace::of(&[]),
+        schedule: 0
+    }), sim.check());
     assert_eq!(1, run_count.get());
 }
 
@@ -218,6 +221,16 @@ fn sim_two_actions_no_deadlock() {
 
     let sim = Sim::new(&model).with_config(default_config().with_max_schedules(10));
     assert_eq!(Pass, sim.check());
+}
+
+impl SimResult {
+    fn ordinal(&self) -> usize {
+        match self {
+            Pass => 0,
+            Fail(_) => 1,
+            Deadlock(_) => 2
+        }
+    }
 }
 
 #[test]
@@ -264,13 +277,17 @@ fn sim_two_actions_deadlock() {
     let mut results = FxHashSet::default();
     for seed in 0..999 {
         sim.set_seed(seed);
-        results.insert(sim.check());
+        let result = sim.check();
+        if let Deadlock(result) = &result {
+            assert_eq!(2, result.trace.calls.len());
+        }
+        results.insert(result.ordinal());
         if results.len() == 2 {
             break;
         }
     }
     // some runs will result in a deadlock, while others will pass
-    assert_eq!(FxHashSet::from_iter([Deadlock, Pass]), results);
+    assert_eq!(FxHashSet::from_iter([0, 2]), results);
 }
 
 #[test]

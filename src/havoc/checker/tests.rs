@@ -272,7 +272,14 @@ fn dfs_two_actions_no_deadlock() {
     }
 
     let checker = Checker::new(&model).with_config(default_config());
-    assert!(matches!(checker.check(), Pass(_)));
+    assert_eq!(Pass(PassResult {
+        stats: Stats {
+            executed: 3,
+            completed: 2,
+            deepest: 4,
+            steps: 9
+        }
+    }), checker.check());
 }
 
 #[test]
@@ -345,8 +352,14 @@ fn dfs_two_actions_one_weak_blocked() {
         });
 
     let checker = Checker::new(&model).with_config(default_config());
-    let result = checker.check();
-    assert!(matches!(result, Pass(_)));
+    assert_eq!(Pass(PassResult {
+        stats: Stats {
+            executed: 2,
+            completed: 1,
+            deepest: 1,
+            steps: 1
+        }
+    }), checker.check());
     assert_eq!(1, total_runs.borrow().get("a"));
     assert_eq!(1, total_runs.borrow().get("b"));
 }
@@ -372,8 +385,14 @@ fn dfs_two_actions_one_weak_two_runs() {
         });
 
     let checker = Checker::new(&model).with_config(default_config());
-    let result = checker.check();
-    assert!(matches!(result, Pass(_)));
+    assert_eq!(Pass(PassResult {
+        stats: Stats {
+            executed: 3,
+            completed: 3,
+            deepest: 3,
+            steps: 6
+        }
+    }), checker.check());
     assert_eq!(3, total_runs.borrow().get("a"));
     assert_eq!(3, total_runs.borrow().get("b"));
 }
@@ -412,7 +431,14 @@ fn dfs_rand() {
         }
     });
 
-    assert!(matches!(Checker::new(&model).with_config(default_config()).check(), Pass(_)));
+    assert_eq!(Pass(PassResult {
+        stats: Stats {
+            executed: 1,
+            completed: 1,
+            deepest: NUM_RUNS as usize,
+            steps: NUM_RUNS as usize
+        }
+    }), Checker::new(&model).with_config(default_config()).check());
     assert_eq!(NUM_RUNS * 2, generated.borrow().len() as i64);
 
     // repeat run should yield the same random numbers

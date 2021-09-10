@@ -14,12 +14,18 @@ use std::borrow::Cow;
 pub enum SimResult {
     Pass,
     Fail(FailResult),
-    Deadlock,
+    Deadlock(DeadlockResult),
 }
 
 #[derive(PartialEq, Debug, Eq, Hash)]
 pub struct FailResult {
     pub error: String,
+    pub trace: Trace,
+    pub schedule: usize
+}
+
+#[derive(PartialEq, Debug, Eq, Hash)]
+pub struct DeadlockResult {
     pub trace: Trace,
     pub schedule: usize
 }
@@ -230,7 +236,10 @@ impl<'a, S> Sim<'a, S> {
                             if sublevel.allows(Sublevel::Fine) {
                                 log::trace!("      deadlocked with {:?}", stats);
                             }
-                            return Deadlock;
+                            return Deadlock(DeadlockResult {
+                                trace: trace.clone(),
+                                schedule: stats.completed
+                            });
                         }
                     }
                     Joined => {
