@@ -11,9 +11,9 @@ use std::borrow::Cow;
 
 #[derive(PartialEq, Debug, Eq, Hash)]
 pub enum CheckResult {
-    Pass(CheckPass),
-    Fail(CheckFail),
-    Deadlock,
+    Pass(PassResult),
+    Fail(FailResult),
+    Deadlock(DeadlockResult),
 }
 
 impl CheckResult {
@@ -21,20 +21,26 @@ impl CheckResult {
         match self {
             Pass(pass) => &pass.stats,
             Fail(fail) => &fail.stats,
-            Deadlock => unimplemented!()
+            Deadlock(deadlock) => &deadlock.stats
         }
     }
 }
 
 #[derive(PartialEq, Debug, Eq, Hash)]
-pub struct CheckPass {
+pub struct PassResult {
     pub stats: Stats
 }
 
 #[derive(PartialEq, Debug, Eq, Hash)]
-pub struct CheckFail {
+pub struct FailResult {
     pub stats: Stats,
     pub error: String,
+    pub trace: Trace
+}
+
+#[derive(PartialEq, Debug, Eq, Hash)]
+pub struct DeadlockResult {
+    pub stats: Stats,
     pub trace: Trace
 }
 
@@ -83,7 +89,7 @@ fn build_trace(check_stack: &[Frame], depth: usize) -> Trace {
         let frame = &check_stack[stack_index];
         stack.push(Call { action: frame.index, rands: frame.rands.clone() })
     }
-    Trace { stack }
+    Trace { calls: stack }
 }
 
 #[derive(PartialEq, Debug, Eq, Hash)]
@@ -151,7 +157,7 @@ impl<'a, S> Checker<'a, S> {
             stats: Stats {
                 executed: 0,
                 completed: 0,
-                deepest: 1,
+                deepest: 0,
                 steps: 0,
             },
             model,
@@ -186,7 +192,6 @@ impl<'a, S> Checker<'a, S> {
         if self.stats.executed % 100000 == 0 {
             let num_actions = self.model.actions.len();
             let (mut sum, mut frac, divisor) = (0f64, 1f64, num_actions as f64);
-            // log::debug!("stack: {:?}", self.stack);
             for frame in self.stack.iter() {
                 frac /= divisor;
                 sum += frame.index as f64 * frac;
@@ -202,17 +207,8 @@ impl<'a, S> Checker<'a, S> {
     }
 
     #[inline]
-    fn capture_stats(&mut self) {
-        if self.depth + 1 > self.stats.deepest {
-            self.stats.deepest = self.depth + 1;
-        }
-        self.stats.steps += self.depth + 1;
-    }
-
-    #[inline]
     fn unwind(&mut self) -> Option<S> {
         let sublevel = self.config.sublevel.if_trace();
-        self.capture_stats();
 
         loop {
             let top = &mut self.stack[self.depth];
@@ -336,15 +332,29 @@ impl<'a, S> Checker<'a, S> {
                     self.blocked.insert(top.index);
 
                     if self.blocked.len() == self.live.len() {
-                        self.capture_stats();
+                        self.stats.completed += 1;
+                        self.stats.steps += self.depth;
+                        if self.depth > self.stats.deepest {
+                            self.stats.deepest = self.depth;
+                        }
                         if sublevel.allows(Sublevel::Fine) {
                             log::trace!("      deadlocked with {:?}", self.stats);
                         }
-                        return Deadlock;
+                        return Deadlock(DeadlockResult {
+                            stats: self.stats,
+                            trace: match self.depth {
+                                0 => Trace { calls: vec![] },
+                                _ => build_trace(&self.stack, self.depth - 1)
+                            }
+                        });
                     } else {
                         if top.index + 1 == self.model.actions.len() {
                             if sublevel.allows(Sublevel::Finest) {
                                 log::trace!("      abandoned run");
+                            }
+                            self.stats.steps += self.depth;
+                            if self.depth > self.stats.deepest {
+                                self.stats.deepest = self.depth;
                             }
                             match self.unwind() {
                                 None => {
@@ -354,7 +364,7 @@ impl<'a, S> Checker<'a, S> {
                                             self.stats
                                         );
                                     }
-                                    return Pass(CheckPass { stats: self.stats });
+                                    return Pass(PassResult { stats: self.stats });
                                 }
                                 Some(s) => state = s,
                             }
@@ -379,6 +389,10 @@ impl<'a, S> Checker<'a, S> {
                             log::trace!("    no more strong actions");
                         }
                         self.stats.completed += 1;
+                        self.stats.steps += self.depth + 1;
+                        if self.depth + 1 > self.stats.deepest {
+                            self.stats.deepest = self.depth + 1;
+                        }
                         match self.unwind() {
                             None => {
                                 if sublevel.allows(Sublevel::Fine) {
@@ -387,7 +401,7 @@ impl<'a, S> Checker<'a, S> {
                                         self.stats
                                     );
                                 }
-                                return Pass(CheckPass { stats: self.stats });
+                                return Pass(PassResult { stats: self.stats });
                             }
                             Some(s) => state = s,
                         }
@@ -398,8 +412,11 @@ impl<'a, S> Checker<'a, S> {
                 }
                 ActionResult::Breached(error) => {
                     self.stats.completed += 1;
-                    self.capture_stats();
-                    return Fail(CheckFail {
+                    self.stats.steps += self.depth + 1;
+                    if self.depth + 1 > self.stats.deepest {
+                        self.stats.deepest = self.depth + 1;
+                    }
+                    return Fail(FailResult {
                         stats: self.stats, error,
                         trace: build_trace(&self.stack, self.depth)
                     });

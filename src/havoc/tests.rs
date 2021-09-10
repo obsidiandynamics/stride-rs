@@ -10,7 +10,7 @@ impl Call {
 
 impl Trace {
     pub(crate) fn of(calls: &[Call]) -> Self {
-        Trace { stack: calls.to_vec() }
+        Trace { calls: calls.to_vec() }
     }
 }
 

@@ -33,7 +33,14 @@ fn dfs_one_shot() {
         });
 
     let checker = Checker::new(&model).with_config(default_config());
-    assert!(matches!(checker.check(), Pass(_)));
+    assert_eq!(Pass(PassResult {
+        stats: Stats {
+            executed: 1,
+            completed: 1,
+            deepest: 1,
+            steps: 1
+        }
+    }), checker.check());
     assert_eq!(1, run_count.get());
 }
 
@@ -52,7 +59,14 @@ fn dfs_two_shots() {
         });
 
     let checker = Checker::new(&model).with_config(default_config());
-    assert!(matches!(checker.check(), Pass(_)));
+    assert_eq!(Pass(PassResult {
+        stats: Stats {
+            executed: 1,
+            completed: 1,
+            deepest: 2,
+            steps: 2
+        }
+    }), checker.check());
     assert_eq!(2, run_count.get());
 }
 
@@ -72,8 +86,14 @@ fn dfs_two_actions() {
         });
 
     let checker = Checker::new(&model).with_config(default_config());
-    let result = checker.check();
-    assert!(matches!(result, Pass(_)));
+    assert_eq!(Pass(PassResult {
+        stats: Stats {
+            executed: 2,
+            completed: 2,
+            deepest: 2,
+            steps: 4
+        }
+    }), checker.check());
     assert_eq!(2, total_runs.borrow().get("a"));
     assert_eq!(2, total_runs.borrow().get("b"));
 }
@@ -98,8 +118,14 @@ fn dfs_two_actions_conditional() {
         });
 
     let checker = Checker::new(&model).with_config(default_config());
-    let result = checker.check();
-    assert!(matches!(result, Pass(_)));
+    assert_eq!(Pass(PassResult {
+        stats: Stats {
+            executed: 2,
+            completed: 1,
+            deepest: 2,
+            steps: 2
+        }
+    }), checker.check());
     assert_eq!(1, total_runs.borrow().get("a"));
     assert_eq!(1, total_runs.borrow().get("b"));
 }
@@ -123,8 +149,14 @@ fn dfs_two_actions_by_two() {
         });
 
     let checker = Checker::new(&model).with_config(default_config());
-    let result = checker.check();
-    assert!(matches!(result, Pass(_)));
+    assert_eq!(Pass(PassResult {
+        stats: Stats {
+            executed: 3,
+            completed: 3,
+            deepest: 3,
+            steps: 9
+        }
+    }), checker.check());
     assert_eq!(3, total_runs.borrow().get("a"));
     assert_eq!(6, total_runs.borrow().get("b"));
 }
@@ -149,8 +181,14 @@ fn dfs_three_actions() {
         });
 
     let checker = Checker::new(&model).with_config(default_config());
-    let result = checker.check();
-    assert!(matches!(result, Pass(_)));
+    assert_eq!(Pass(PassResult {
+        stats: Stats {
+            executed: 6,
+            completed: 6,
+            deepest: 3,
+            steps: 18
+        }
+    }), checker.check());
     assert_eq!(6, total_runs.borrow().get("a"));
     assert_eq!(6, total_runs.borrow().get("b"));
     assert_eq!(6, total_runs.borrow().get("c"));
@@ -179,11 +217,17 @@ fn dfs_three_actions_by_two() {
         });
 
     let checker = Checker::new(&model).with_config(default_config());
-    let result = checker.check();
+    assert_eq!(Pass(PassResult {
+        stats: Stats {
+            executed: 12,
+            completed: 12,
+            deepest: 4,
+            steps: 48
+        }
+    }), checker.check());
     assert_eq!(12, total_runs.borrow().get("a"));
     assert_eq!(12, total_runs.borrow().get("b"));
     assert_eq!(24, total_runs.borrow().get("c"));
-    assert!(matches!(result, Pass(_)));
 }
 
 #[test]
@@ -198,7 +242,15 @@ fn dfs_one_shot_deadlock() {
         });
 
     let checker = Checker::new(&model).with_config(default_config());
-    assert_eq!(Deadlock, checker.check());
+    assert_eq!(Deadlock(DeadlockResult {
+        stats: Stats {
+            executed: 1,
+            completed: 1,
+            deepest: 0,
+            steps: 0
+        },
+        trace: Trace::of(&[]),
+    }), checker.check());
     assert_eq!(1, run_count.get());
 }
 
@@ -264,7 +316,15 @@ fn dfs_two_actions_deadlock() {
         });
 
     let checker = Checker::new(&model).with_config(default_config());
-    assert_eq!(Deadlock, checker.check());
+    assert_eq!(Deadlock(DeadlockResult {
+        stats: Stats {
+            executed: 3,
+            completed: 2,
+            deepest: 6,
+            steps: 10
+        },
+        trace: Trace::of(&[Call::of(0, &[]), Call::of(1, &[])]),
+    }), checker.check());
 }
 
 #[test]
@@ -342,9 +402,9 @@ fn dfs_rand() {
 
         let trace = c.trace();
         let completed = s.counter.inc(c.name().into());
-        assert_eq!(completed, trace.stack.len() as i64);
+        assert_eq!(completed, trace.calls.len() as i64);
         let rands_from_trace: Vec<Vec<u64>> =
-            trace.stack.iter().map(|call| call.rands.clone()).collect();
+            trace.calls.iter().map(|call| call.rands.clone()).collect();
         assert_eq!(s.rands, rands_from_trace);
         match completed {
             NUM_RUNS => Joined,
@@ -353,6 +413,7 @@ fn dfs_rand() {
     });
 
     assert!(matches!(Checker::new(&model).with_config(default_config()).check(), Pass(_)));
+    assert_eq!(NUM_RUNS * 2, generated.borrow().len() as i64);
 
     // repeat run should yield the same random numbers
     assert!(matches!(Checker::new(&model).with_config(default_config()).check(), Pass(_)));
@@ -373,7 +434,7 @@ fn dfs_one_shot_breach() {
     let checker = Checker::new(&model).with_config(default_config());
     assert_eq!(
         Fail(
-            CheckFail {
+            FailResult {
                 stats: Stats {
                     executed: 1,
                     completed: 1,

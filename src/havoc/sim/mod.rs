@@ -13,12 +13,12 @@ use std::borrow::Cow;
 #[derive(PartialEq, Debug, Eq, Hash)]
 pub enum SimResult {
     Pass,
-    Fail(SimFail),
+    Fail(FailResult),
     Deadlock,
 }
 
 #[derive(PartialEq, Debug, Eq, Hash)]
-pub struct SimFail {
+pub struct FailResult {
     pub error: String,
     pub trace: Trace,
     pub schedule: usize
@@ -79,7 +79,7 @@ impl<'a, S> SimContext<'a, S> {
     fn hash(&self) -> u64 {
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
         hasher.write_usize(0x517cc1b727220a95); // K from FxHasher
-        for call in &self.trace.stack {
+        for call in &self.trace.calls {
             hasher.write_usize(call.action);
             for &rand in &call.rands {
                 hasher.write_u64(rand);
@@ -178,7 +178,7 @@ impl<'a, S> Sim<'a, S> {
             for i in 0..self.model.actions.len() {
                 live.insert(i);
             }
-            trace.stack.clear();
+            trace.calls.clear();
             let mut strong_count = init_strong_count;
 
             let mut rng = rand::rngs::StdRng::seed_from_u64(stats.completed as u64 + self.seed);
@@ -201,7 +201,7 @@ impl<'a, S> Sim<'a, S> {
                     continue;
                 }
 
-                trace.stack.push(Call { action: action_index, rands: vec![] });
+                trace.calls.push(Call { action: action_index, rands: vec![] });
                 let action_entry = &self.model.actions[action_index];
                 if sublevel.allows(Sublevel::Fine) {
                     log::trace!("  running {}", action_entry.name);
@@ -255,7 +255,7 @@ impl<'a, S> Sim<'a, S> {
                         if sublevel.allows(Sublevel::Fine) {
                             log::trace!("      invariant breached: {}", error);
                         }
-                        return Fail(SimFail {
+                        return Fail(FailResult {
                             error,
                             trace: trace.clone(),
                             schedule: stats.completed
@@ -265,7 +265,7 @@ impl<'a, S> Sim<'a, S> {
             }
 
             stats.completed += 1;
-            let depth = trace.stack.len();
+            let depth = trace.calls.len();
             if depth > stats.deepest {
                 stats.deepest = depth;
             }

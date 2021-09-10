@@ -124,20 +124,20 @@ pub struct Call {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Trace {
-    pub stack: Vec<Call>
+    pub calls: Vec<Call>
 }
 
 impl Trace {
     pub(crate) fn new() -> Self {
-        Trace { stack: vec![] }
+        Trace { calls: vec![] }
     }
 
     pub(crate) fn peek(&self) -> &Call {
-        self.stack.last().unwrap()
+        self.calls.last().unwrap()
     }
 
     pub(crate) fn peek_mut(&mut self) -> &mut Call {
-        self.stack.last_mut().unwrap()
+        self.calls.last_mut().unwrap()
     }
 
     pub(crate) fn push_rand(&mut self, rand: u64) {
@@ -145,7 +145,7 @@ impl Trace {
     }
 
     pub(crate) fn pop(&mut self) -> Call {
-        self.stack.remove(self.stack.len() - 1)
+        self.calls.remove(self.calls.len() - 1)
     }
 
     pub fn prettify<'a, S>(&'a self, model: &'a Model<'a, S>) -> PrettyTrace<'a, S> {
@@ -160,7 +160,7 @@ pub struct PrettyTrace<'a, S> {
 
 impl<S> Display for PrettyTrace<'_, S> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        for (stack_index, call) in self.trace.stack.iter().enumerate() {
+        for (stack_index, call) in self.trace.calls.iter().enumerate() {
             let action_entry = self.model.actions.get(call.action).ok_or(fmt::Error)?;
             write!(f, "{: >3}: {}\n", stack_index, &action_entry.name)?;
             if call.rands.is_empty() {

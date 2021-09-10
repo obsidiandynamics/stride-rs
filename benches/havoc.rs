@@ -62,7 +62,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                 )
             },
             |checker| {
-                assert_eq!(CheckResult::Deadlock, checker.check());
+                assert!(matches!(checker.check(), CheckResult::Deadlock(_)));
             },
             BatchSize::SmallInput,
         )

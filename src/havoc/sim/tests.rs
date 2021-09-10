@@ -370,9 +370,9 @@ fn sim_rand() {
 
         let trace = c.trace();
         let completed = s.counter.inc(c.name().into());
-        assert_eq!(completed, trace.stack.len() as i64);
+        assert_eq!(completed, trace.calls.len() as i64);
         let rands_from_trace: Vec<Vec<u64>> =
-            trace.stack.iter().map(|call| call.rands.clone()).collect();
+            trace.calls.iter().map(|call| call.rands.clone()).collect();
         assert_eq!(s.rands, rands_from_trace);
         match completed {
             NUM_RUNS => Joined,
@@ -401,7 +401,7 @@ fn sim_one_shot_breach() {
     let sim = Sim::new(&model).with_config(default_config().with_max_schedules(3));
     assert_eq!(
         Fail(
-            SimFail {
+            FailResult {
                 error: "some invariant".to_string(),
                 trace: Trace::of(&[Call::of(0, &[])]),
                 schedule: 0
