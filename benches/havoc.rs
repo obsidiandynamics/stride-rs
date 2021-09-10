@@ -83,7 +83,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                 sim
             },
             |sim| {
-                assert_eq!(SimResult::Deadlock, sim.check());
+                assert!(matches!(sim.check(), SimResult::Deadlock(_)));
             },
             BatchSize::SmallInput,
         )
