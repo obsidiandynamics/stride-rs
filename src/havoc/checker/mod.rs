@@ -18,26 +18,18 @@ pub enum CheckResult {
 
 struct CheckContext<'a, S> {
     model: &'a Model<'a, S>,
-    stack: &'a Vec<Frame>,
+    stack: &'a mut Vec<Frame>,
     depth: usize,
-    rands: Vec<u64>,
 }
 
 impl<'a, S> CheckContext<'a, S> {
-    fn rands_for_stack_index(&self, stack_index: usize) -> &[u64] {
-        if stack_index == self.depth {
-            &self.rands
-        } else {
-            &self.stack[stack_index].rands
-        }
-    }
-
     fn hash(&self) -> u64 {
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
         hasher.write_usize(0x517cc1b727220a95); // K from FxHasher
         for stack_index in 0..=self.depth {
-            hasher.write_usize(self.stack[stack_index].index);
-            for &rand in self.rands_for_stack_index(stack_index) {
+            let frame = &self.stack[stack_index];
+            hasher.write_usize(frame.index);
+            for &rand in &frame.rands {
                 hasher.write_u64(rand);
             }
         }
@@ -54,7 +46,7 @@ impl<S> Context for CheckContext<'_, S> {
     fn rand(&mut self, limit: u64) -> u64 {
         let rand =
             rand::rngs::StdRng::seed_from_u64(self.hash()).gen_range(0..limit);
-        self.rands.push(rand);
+        self.stack[self.depth].rands.push(rand);
         rand
     }
 
@@ -62,10 +54,7 @@ impl<S> Context for CheckContext<'_, S> {
         let mut stack = Vec::with_capacity(self.depth);
         for stack_index in 0..=self.depth {
             let frame = &self.stack[stack_index];
-            stack.push(Call {
-                action: frame.index,
-                rands: self.rands_for_stack_index(stack_index).to_vec()
-            })
+            stack.push(Call { action: frame.index, rands: frame.rands.clone() })
         }
         Cow::Owned(Trace { stack })
     }
@@ -284,22 +273,23 @@ impl<'a, S> Checker<'a, S> {
                 }
             }
 
-            let top = &self.stack[self.depth];
-            let action_entry = &self.model.actions[top.index];
+            let action_entry = {
+                let top = &mut self.stack[self.depth];
+                top.rands = vec![];
+                &self.model.actions[top.index]
+            };
+
             if sublevel.allows(Sublevel::Fine) {
                 log::trace!("  running {}", action_entry.name);
             }
 
             let mut context = CheckContext {
                 model: self.model,
-                stack: &self.stack,
+                stack: &mut self.stack,
                 depth: self.depth,
-                rands: vec![],
             };
             let result = (*action_entry.action)(&mut state, &mut context);
-            let rands = context.rands;
             let top = &mut self.stack[self.depth];
-            top.rands = rands;
 
             match result {
                 ActionResult::Ran => {
