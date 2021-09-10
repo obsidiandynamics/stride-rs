@@ -29,7 +29,7 @@ impl Counter {
             }
             Entry::Vacant(entry) => {
                 entry.insert(amount);
-                0
+                amount
             }
         }
     }
@@ -97,9 +97,9 @@ mod tests {
     fn counter_add() {
         let mut counter = Counter::new();
         assert_eq!(0, counter.get("test"));
-        counter.inc("test".into());
+        assert_eq!(1, counter.inc("test".into()));
         assert_eq!(1, counter.get("test"));
-        counter.add("test".into(), -1);
+        assert_eq!(0, counter.add("test".into(), -1));
         assert_eq!(0, counter.get("test"));
     }
 

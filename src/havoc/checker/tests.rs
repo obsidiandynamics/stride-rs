@@ -4,9 +4,9 @@ use rustc_hash::FxHashSet;
 
 use crate::havoc::checker::{Checker, Config};
 use crate::havoc::component::*;
-use crate::havoc::model::{ActionResult, Model, name_of};
 use crate::havoc::model::ActionResult::{Blocked, Joined, Ran};
 use crate::havoc::model::Retention::{Strong, Weak};
+use crate::havoc::model::{name_of, ActionResult, Model};
 
 use super::*;
 
@@ -90,7 +90,7 @@ fn dfs_two_actions_conditional() {
             Joined
         })
         .with_action("b".into(), Strong, |s, c| {
-            if s.inc(c.name().into()) == 0 && s.get("a") == 0 {
+            if s.inc(c.name().into()) == 1 && s.get("a") == 0 {
                 return Blocked;
             }
             total_runs.borrow_mut().inc(c.name().into());
@@ -207,20 +207,16 @@ fn dfs_two_actions_no_deadlock() {
     init_log();
     let mut model = Model::new(Lock::new).with_name(name_of(&dfs_two_actions_no_deadlock).into());
     for c in ["a", "b"] {
-        model.add_action(
-            String::from("test-".to_owned() + c),
-            Strong,
-            |s, c| {
-                if s.held(c.name()) {
-                    s.unlock();
-                    Joined
-                } else if s.lock(c.name().into()) {
-                    Ran
-                } else {
-                    Blocked
-                }
-            },
-        );
+        model.add_action(String::from("test-".to_owned() + c), Strong, |s, c| {
+            if s.held(c.name()) {
+                s.unlock();
+                Joined
+            } else if s.lock(c.name().into()) {
+                Ran
+            } else {
+                Blocked
+            }
+        });
     }
 
     let checker = Checker::new(&model).with_config(default_config());
@@ -327,20 +323,44 @@ fn dfs_rand() {
     init_log();
     let generated = RefCell::new(FxHashSet::default());
     const NUM_RUNS: i64 = 3;
-    let model = Model::new(Counter::new)
-        .with_name(name_of(&dfs_rand).into())
-        .with_action("test".into(), Strong, |s, c| {
-            let random_number = c.rand(u64::MAX);
-            generated.borrow_mut().insert(random_number);
-            match s.inc(c.name().into()) {
-                NUM_RUNS => Joined,
-                _ => Ran,
-            }
-        });
-    assert_eq!(Flawless, Checker::new(&model).with_config(default_config()).check());
-    assert_eq!(NUM_RUNS, generated.borrow().len() as i64);
+    struct State {
+        counter: Counter,
+        rands: Vec<Vec<u64>>,
+    }
+    let model = Model::new(|| State {
+        counter: Counter::new(),
+        rands: vec![],
+    })
+    .with_name(name_of(&dfs_rand).into())
+    .with_action("test".into(), Strong, |s, c| {
+        let current_rands = vec![c.rand(u64::MAX), c.rand(u64::MAX)];
+        for &rand in &current_rands {
+            generated.borrow_mut().insert(rand);
+        }
+
+        s.rands.push(current_rands);
+
+        let trace = c.trace();
+        let completed = s.counter.inc(c.name().into());
+        assert_eq!(completed, trace.stack.len() as i64);
+        let rands_from_trace: Vec<Vec<u64>> =
+            trace.stack.iter().map(|call| call.rands.clone()).collect();
+        assert_eq!(s.rands, rands_from_trace);
+        match completed {
+            NUM_RUNS => Joined,
+            _ => Ran,
+        }
+    });
+    assert_eq!(
+        Flawless,
+        Checker::new(&model).with_config(default_config()).check()
+    );
+    assert_eq!(NUM_RUNS * 2, generated.borrow().len() as i64);
 
     // repeat run should yield the same random numbers
-    assert_eq!(Flawless, Checker::new(&model).with_config(default_config()).check());
-    assert_eq!(NUM_RUNS, generated.borrow().len() as i64);
+    assert_eq!(
+        Flawless,
+        Checker::new(&model).with_config(default_config()).check()
+    );
+    assert_eq!(NUM_RUNS * 2, generated.borrow().len() as i64);
 }

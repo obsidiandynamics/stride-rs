@@ -1,12 +1,13 @@
 use std::hash::Hasher;
 
-use rand::{SeedableRng, Rng};
+use rand::{Rng, SeedableRng};
 use rustc_hash::FxHashSet;
 
 use crate::havoc::checker::CheckResult::{Deadlocked, Flawed, Flawless};
-use crate::havoc::model::{ActionResult, Context, Model, Trace};
 use crate::havoc::model::Retention::Strong;
+use crate::havoc::model::{ActionResult, Call, Context, Model, Trace};
 use crate::havoc::Sublevel;
+use std::borrow::Cow;
 
 #[derive(PartialEq, Debug, Eq, Hash)]
 pub enum CheckResult {
@@ -17,7 +18,29 @@ pub enum CheckResult {
 
 struct CheckContext<'a, S> {
     checker: &'a Checker<'a, S>,
-    rands: Vec<u64>
+    rands: Vec<u64>,
+}
+
+impl<'a, S> CheckContext<'a, S> {
+    fn rands_for_stack_index(&self, stack_index: usize) -> &[u64] {
+        if stack_index == self.checker.depth {
+            &self.rands
+        } else {
+            &self.checker.stack[stack_index].rands
+        }
+    }
+
+    fn hash(&self) -> u64 {
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        hasher.write_usize(0x517cc1b727220a95); // K from FxHasher
+        for stack_index in 0..=self.checker.depth {
+            hasher.write_usize(self.checker.stack[stack_index].index);
+            for &rand in self.rands_for_stack_index(stack_index) {
+                hasher.write_u64(rand);
+            }
+        }
+        hasher.finish()
+    }
 }
 
 impl<S> Context for CheckContext<'_, S> {
@@ -28,13 +51,22 @@ impl<S> Context for CheckContext<'_, S> {
     }
 
     fn rand(&mut self, limit: u64) -> u64 {
-        let rand = rand::rngs::StdRng::seed_from_u64(self.checker.hash()).gen_range(0..limit);
+        let rand =
+            rand::rngs::StdRng::seed_from_u64(self.hash()).gen_range(0..limit);
         self.rands.push(rand);
         rand
     }
 
-    fn trace(&self) -> &Trace {
-        todo!()
+    fn trace(&self) -> Cow<Trace> {
+        let mut stack = Vec::with_capacity(self.checker.depth);
+        for stack_index in 0..=self.checker.depth {
+            let frame = &self.checker.stack[stack_index];
+            stack.push(Call {
+                action: frame.index,
+                rands: self.rands_for_stack_index(stack_index).to_vec()
+            })
+        }
+        Cow::Owned(Trace { stack })
     }
 }
 
@@ -93,7 +125,7 @@ struct Frame {
     index: usize,
     live_snapshot: FxHashSet<usize>,
     blocked_snapshot: FxHashSet<usize>,
-    rands: Vec<u64>
+    rands: Vec<u64>,
 }
 
 impl<'a, S> Checker<'a, S> {
@@ -150,16 +182,6 @@ impl<'a, S> Checker<'a, S> {
     }
 
     #[inline]
-    fn hash(&self) -> u64 {
-        let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        hasher.write_usize(0x517cc1b727220a95); // K from FxHasher
-        for i in 0..=self.depth {
-            hasher.write_usize(self.stack[i].index);
-        }
-        hasher.finish()
-    }
-
-    #[inline]
     fn capture_stats(&mut self) {
         if self.depth + 1 > self.stats.deepest {
             self.stats.deepest = self.depth + 1;
@@ -178,7 +200,7 @@ impl<'a, S> Checker<'a, S> {
                 top.index += 1;
                 if top.index == self.model.actions.len()
                     || top.live_snapshot.contains(&top.index)
-                    && !top.blocked_snapshot.contains(&top.index)
+                        && !top.blocked_snapshot.contains(&top.index)
                 {
                     break;
                 }
@@ -207,7 +229,11 @@ impl<'a, S> Checker<'a, S> {
     pub fn check(mut self) -> CheckResult {
         let sublevel = self.config.sublevel.if_trace();
         if sublevel.allows(Sublevel::Fine) {
-            log::trace!("checking '{}' with {:?}", self.model.name().unwrap_or("untitled"), self.config);
+            log::trace!(
+                "checking '{}' with {:?}",
+                self.model.name().unwrap_or("untitled"),
+                self.config
+            );
         }
         self.reset_run();
 
@@ -221,7 +247,7 @@ impl<'a, S> Checker<'a, S> {
                     index: 0,
                     live_snapshot: self.live.clone(),
                     blocked_snapshot: self.blocked.clone(),
-                    rands: vec![]
+                    rands: vec![],
                 });
             }
 
@@ -265,7 +291,7 @@ impl<'a, S> Checker<'a, S> {
 
             let mut context = CheckContext {
                 checker: &self,
-                rands: vec![]
+                rands: vec![],
             };
             let result = (*action_entry.action)(&mut state, &mut context);
             let rands = context.rands;
@@ -300,7 +326,10 @@ impl<'a, S> Checker<'a, S> {
                             match self.unwind() {
                                 None => {
                                     if sublevel.allows(Sublevel::Fine) {
-                                        log::trace!("  passed with {:?} (last run abandoned)", self.stats);
+                                        log::trace!(
+                                            "  passed with {:?} (last run abandoned)",
+                                            self.stats
+                                        );
                                     }
                                     return Flawless;
                                 }
@@ -330,7 +359,10 @@ impl<'a, S> Checker<'a, S> {
                         match self.unwind() {
                             None => {
                                 if sublevel.allows(Sublevel::Fine) {
-                                    log::trace!("  passed with {:?} (last strong action joined)", self.stats);
+                                    log::trace!(
+                                        "  passed with {:?} (last strong action joined)",
+                                        self.stats
+                                    );
                                 }
                                 return Flawless;
                             }

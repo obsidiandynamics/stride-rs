@@ -1,6 +1,7 @@
 use crate::havoc::model::Retention::Strong;
 use std::fmt::{Display, Formatter};
 use core::fmt;
+use std::borrow::Cow;
 
 pub enum ActionResult {
     Ran,
@@ -50,7 +51,7 @@ pub trait Context {
 
     fn rand(&mut self, limit: u64) -> u64;
 
-    fn trace(&self) -> &Trace;
+    fn trace(&self) -> Cow<Trace>;
 }
 
 pub(crate) struct ActionEntry<'a, S> {

@@ -8,6 +8,7 @@ use crate::havoc::model::Retention::Strong;
 use crate::havoc::sim::SimResult::{Deadlock, Pass, Fail};
 use crate::havoc::Sublevel;
 use ActionResult::{Breached, Joined, Blocked, Ran};
+use std::borrow::Cow;
 
 #[derive(PartialEq, Debug, Eq, Hash)]
 pub enum SimResult {
@@ -74,32 +75,36 @@ struct SimContext<'a, S> {
     schedule: usize
 }
 
+impl<'a, S> SimContext<'a, S> {
+    fn hash(&self) -> u64 {
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        hasher.write_usize(0x517cc1b727220a95); // K from FxHasher
+        for call in &self.trace.stack {
+            hasher.write_usize(call.action);
+            for &rand in &call.rands {
+                hasher.write_u64(rand);
+            }
+        }
+        hasher.write_usize(self.schedule);
+        hasher.finish()
+    }
+}
+
 impl<S> Context for SimContext<'_, S> {
     fn name(&self) -> &str {
         &self.model.actions[self.trace.peek().action].name
     }
 
     fn rand(&mut self, limit:  u64) -> u64 {
-        let hash = hash(self.trace, self.schedule);
+        let hash = self.hash();
         let rand = rand::rngs::StdRng::seed_from_u64(hash).gen_range(0..limit);
         self.trace.push_rand(rand);
         rand
     }
 
-    fn trace(&self) -> &Trace {
-        self.trace
+    fn trace(&self) -> Cow<Trace> {
+        Cow::Borrowed(&self.trace)
     }
-}
-
-#[inline]
-fn hash(trace: &Trace, schedule: usize) -> u64 {
-    let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    hasher.write_usize(0x517cc1b727220a95); // K from FxHasher
-    for call in &trace.stack {
-        hasher.write_usize(call.action);
-    }
-    hasher.write_usize(schedule);
-    hasher.finish()
 }
 
 pub struct Sim <'a, S> {

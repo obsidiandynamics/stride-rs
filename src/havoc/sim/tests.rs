@@ -1,11 +1,11 @@
 use super::*;
-use crate::havoc::model::name_of;
-use std::cell::{Cell, RefCell};
 use crate::havoc::component::{Counter, Lock};
-use crate::havoc::model::ActionResult::{Joined, Ran, Blocked};
-use rustc_hash::FxHashSet;
-use std::iter::FromIterator;
+use crate::havoc::model::name_of;
+use crate::havoc::model::ActionResult::{Blocked, Joined, Ran};
 use crate::havoc::model::Retention::Weak;
+use rustc_hash::FxHashSet;
+use std::cell::{Cell, RefCell};
+use std::iter::FromIterator;
 
 fn init_log() {
     let _ = env_logger::builder()
@@ -87,7 +87,7 @@ fn sim_two_actions_conditional() {
             Joined
         })
         .with_action("b".into(), Strong, |s, c| {
-            if s.inc(c.name().into()) == 0 && s.get("a") == 0 {
+            if s.inc(c.name().into()) == 1 && s.get("a") == 0 {
                 return Blocked;
             }
             total_runs.borrow_mut().inc(c.name().into());
@@ -204,20 +204,16 @@ fn sim_two_actions_no_deadlock() {
     init_log();
     let mut model = Model::new(Lock::new).with_name(name_of(&sim_two_actions_no_deadlock).into());
     for c in ["a", "b"] {
-        model.add_action(
-            String::from("test-".to_owned() + c),
-            Strong,
-            |s, c| {
-                if s.held(c.name()) {
-                    s.unlock();
-                    Joined
-                } else if s.lock(c.name().into()) {
-                    Ran
-                } else {
-                    Blocked
-                }
-            },
-        );
+        model.add_action(String::from("test-".to_owned() + c), Strong, |s, c| {
+            if s.held(c.name()) {
+                s.unlock();
+                Joined
+            } else if s.lock(c.name().into()) {
+                Ran
+            } else {
+                Blocked
+            }
+        });
     }
 
     let sim = Sim::new(&model).with_config(default_config().with_max_schedules(10));
@@ -312,7 +308,6 @@ fn sim_two_actions_one_weak_blocked() {
     assert_eq!(FxHashSet::from_iter([0, 1]), run_counts);
 }
 
-
 #[test]
 fn sim_two_actions_one_weak_two_runs() {
     init_log();
@@ -356,23 +351,40 @@ fn sim_rand() {
     init_log();
     let generated = RefCell::new(FxHashSet::default());
     const NUM_RUNS: i64 = 3;
-    let model = Model::new(Counter::new)
-        .with_name(name_of(&sim_rand).into())
-        .with_action("test".into(), Strong, |s, c| {
-            let random_number = c.rand(u64::MAX);
-            assert_eq!(vec![random_number], c.trace().peek().rands);
-            generated.borrow_mut().insert(random_number);
-            match s.inc(c.name().into()) {
-                NUM_RUNS => Joined,
-                _ => Ran,
-            }
-        });
+    struct State {
+        counter: Counter,
+        rands: Vec<Vec<u64>>,
+    }
+    let model = Model::new(|| State {
+        counter: Counter::new(),
+        rands: vec![],
+    })
+    .with_name(name_of(&sim_rand).into())
+    .with_action("test".into(), Strong, |s, c| {
+        let current_rands = vec![c.rand(u64::MAX), c.rand(u64::MAX)];
+        for &rand in &current_rands {
+            generated.borrow_mut().insert(rand);
+        }
+
+        s.rands.push(current_rands);
+
+        let trace = c.trace();
+        let completed = s.counter.inc(c.name().into());
+        assert_eq!(completed, trace.stack.len() as i64);
+        let rands_from_trace: Vec<Vec<u64>> =
+            trace.stack.iter().map(|call| call.rands.clone()).collect();
+        assert_eq!(s.rands, rands_from_trace);
+        match completed {
+            NUM_RUNS => Joined,
+            _ => Ran,
+        }
+    });
     assert_eq!(Pass, Sim::new(&model).with_config(default_config()).check());
-    assert_eq!(NUM_RUNS, generated.borrow().len() as i64);
+    assert_eq!(NUM_RUNS * 2, generated.borrow().len() as i64);
 
     // repeat run should yield the same random numbers
     assert_eq!(Pass, Sim::new(&model).with_config(default_config()).check());
-    assert_eq!(NUM_RUNS, generated.borrow().len() as i64);
+    assert_eq!(NUM_RUNS * 2, generated.borrow().len() as i64);
 }
 
 #[test]
@@ -387,10 +399,16 @@ fn sim_one_shot_breach() {
         });
 
     let sim = Sim::new(&model).with_config(default_config().with_max_schedules(3));
-    assert_eq!(Fail(SimFail {
-        error: "some invariant".to_string(),
-        trace: Trace::of(&[Call::of(0, &[])]),
-        schedule: 0
-    }.into()), sim.check());
+    assert_eq!(
+        Fail(
+            SimFail {
+                error: "some invariant".to_string(),
+                trace: Trace::of(&[Call::of(0, &[])]),
+                schedule: 0
+            }
+            .into()
+        ),
+        sim.check()
+    );
     assert_eq!(1, run_count.get());
 }
