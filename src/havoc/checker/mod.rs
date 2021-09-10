@@ -3,7 +3,7 @@ use std::hash::Hasher;
 use rand::{Rng, SeedableRng};
 use rustc_hash::FxHashSet;
 
-use crate::havoc::checker::CheckResult::{Deadlocked, Flawed, Flawless};
+use crate::havoc::checker::CheckResult::{Deadlock, Fail, Pass};
 use crate::havoc::model::Retention::Strong;
 use crate::havoc::model::{ActionResult, Call, Context, Model, Trace};
 use crate::havoc::Sublevel;
@@ -11,9 +11,15 @@ use std::borrow::Cow;
 
 #[derive(PartialEq, Debug, Eq, Hash)]
 pub enum CheckResult {
-    Flawless,
-    Flawed(String),
-    Deadlocked,
+    Pass,
+    Fail(CheckFail),
+    Deadlock,
+}
+
+#[derive(PartialEq, Debug, Eq, Hash)]
+pub struct CheckFail {
+    pub error: String,
+    pub trace: Trace
 }
 
 struct CheckContext<'a, S> {
@@ -51,13 +57,17 @@ impl<S> Context for CheckContext<'_, S> {
     }
 
     fn trace(&self) -> Cow<Trace> {
-        let mut stack = Vec::with_capacity(self.depth);
-        for stack_index in 0..=self.depth {
-            let frame = &self.stack[stack_index];
-            stack.push(Call { action: frame.index, rands: frame.rands.clone() })
-        }
-        Cow::Owned(Trace { stack })
+        Cow::Owned(build_trace(self.stack, self.depth))
     }
+}
+
+fn build_trace(check_stack: &[Frame], depth: usize) -> Trace {
+    let mut stack = Vec::with_capacity(depth);
+    for stack_index in 0..=depth {
+        let frame = &check_stack[stack_index];
+        stack.push(Call { action: frame.index, rands: frame.rands.clone() })
+    }
+    Trace { stack }
 }
 
 #[derive(Debug)]
@@ -310,7 +320,7 @@ impl<'a, S> Checker<'a, S> {
                         if sublevel.allows(Sublevel::Fine) {
                             log::trace!("      deadlocked with {:?}", self.stats);
                         }
-                        return Deadlocked;
+                        return Deadlock;
                     } else {
                         if top.index + 1 == self.model.actions.len() {
                             if sublevel.allows(Sublevel::Finest) {
@@ -324,7 +334,7 @@ impl<'a, S> Checker<'a, S> {
                                             self.stats
                                         );
                                     }
-                                    return Flawless;
+                                    return Pass;
                                 }
                                 Some(s) => state = s,
                             }
@@ -357,7 +367,7 @@ impl<'a, S> Checker<'a, S> {
                                         self.stats
                                     );
                                 }
-                                return Flawless;
+                                return Pass;
                             }
                             Some(s) => state = s,
                         }
@@ -367,7 +377,7 @@ impl<'a, S> Checker<'a, S> {
                     self.blocked.clear();
                 }
                 ActionResult::Breached(error) => {
-                    return Flawed(error);
+                    return Fail(CheckFail { error, trace: build_trace(&self.stack, self.depth)});
                 }
             }
         }

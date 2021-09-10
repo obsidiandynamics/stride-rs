@@ -254,7 +254,7 @@ fn dfs_test(num_values: usize, num_cohorts: usize, txns_per_cohort: usize, name:
             .check()
     });
     log::debug!("took {:?}", elapsed);
-    assert_eq!(CheckResult::Flawless, result);
+    assert_eq!(CheckResult::Pass, result);
 }
 
 // #[test]

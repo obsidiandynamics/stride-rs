@@ -246,7 +246,7 @@ fn dfs_test(combos: &[(usize, usize)], values: &[i32], txns_per_cohort: usize, n
             .check()
     });
     log::debug!("took {:?}", elapsed);
-    assert_eq!(CheckResult::Flawless, result);
+    assert_eq!(CheckResult::Pass, result);
 }
 
 #[test]
