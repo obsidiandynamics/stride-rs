@@ -17,24 +17,26 @@ pub enum CheckResult {
 }
 
 struct CheckContext<'a, S> {
-    checker: &'a Checker<'a, S>,
+    model: &'a Model<'a, S>,
+    stack: &'a Vec<Frame>,
+    depth: usize,
     rands: Vec<u64>,
 }
 
 impl<'a, S> CheckContext<'a, S> {
     fn rands_for_stack_index(&self, stack_index: usize) -> &[u64] {
-        if stack_index == self.checker.depth {
+        if stack_index == self.depth {
             &self.rands
         } else {
-            &self.checker.stack[stack_index].rands
+            &self.stack[stack_index].rands
         }
     }
 
     fn hash(&self) -> u64 {
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
         hasher.write_usize(0x517cc1b727220a95); // K from FxHasher
-        for stack_index in 0..=self.checker.depth {
-            hasher.write_usize(self.checker.stack[stack_index].index);
+        for stack_index in 0..=self.depth {
+            hasher.write_usize(self.stack[stack_index].index);
             for &rand in self.rands_for_stack_index(stack_index) {
                 hasher.write_u64(rand);
             }
@@ -45,9 +47,8 @@ impl<'a, S> CheckContext<'a, S> {
 
 impl<S> Context for CheckContext<'_, S> {
     fn name(&self) -> &str {
-        let model = self.checker.model;
-        let frame = &self.checker.stack[self.checker.depth];
-        &model.actions[frame.index].name
+        let frame = &self.stack[self.depth];
+        &self.model.actions[frame.index].name
     }
 
     fn rand(&mut self, limit: u64) -> u64 {
@@ -58,9 +59,9 @@ impl<S> Context for CheckContext<'_, S> {
     }
 
     fn trace(&self) -> Cow<Trace> {
-        let mut stack = Vec::with_capacity(self.checker.depth);
-        for stack_index in 0..=self.checker.depth {
-            let frame = &self.checker.stack[stack_index];
+        let mut stack = Vec::with_capacity(self.depth);
+        for stack_index in 0..=self.depth {
+            let frame = &self.stack[stack_index];
             stack.push(Call {
                 action: frame.index,
                 rands: self.rands_for_stack_index(stack_index).to_vec()
@@ -290,7 +291,9 @@ impl<'a, S> Checker<'a, S> {
             }
 
             let mut context = CheckContext {
-                checker: &self,
+                model: self.model,
+                stack: &self.stack,
+                depth: self.depth,
                 rands: vec![],
             };
             let result = (*action_entry.action)(&mut state, &mut context);
