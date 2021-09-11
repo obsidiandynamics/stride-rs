@@ -79,7 +79,7 @@ fn build_model<'a>(
         model.add_action(format!("replicator-{}", cohort_index), Weak, replicator_action(cohort_index, asserter(num_values)));
     }
     model.add_action("certifier".into(), Weak, certifier_action());
-    model.add_action("supervisor".into(), Strong, supervisor_action(txns_per_cohort));
+    model.add_action("supervisor".into(), Strong, supervisor_action(num_cohorts * txns_per_cohort));
     model
 }
 

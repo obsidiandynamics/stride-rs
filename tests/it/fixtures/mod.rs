@@ -8,20 +8,22 @@ use std::time::{Duration, SystemTime};
 use rand::RngCore;
 use uuid::Uuid;
 
+use std::convert::{TryFrom, TryInto};
 use stride::havoc::checker::{CheckResult, Checker};
 use stride::havoc::model::ActionResult::{Blocked, Breached, Joined, Ran};
-use stride::havoc::model::{ActionResult, Context, Model, rand_element};
+use stride::havoc::model::{rand_element, ActionResult, Context, Model};
 use stride::havoc::sim::{Sim, SimResult};
 use stride::havoc::{checker, sim, Sublevel};
 use stride::{
     AbortMessage, Candidate, CandidateMessage, CommitMessage, DecisionMessage, Examiner, Outcome,
 };
+use std::fmt::Debug;
 
 #[derive(Debug)]
 pub struct SystemState {
     pub cohorts: Vec<Cohort>,
     pub certifier: Certifier,
-    pub run: usize
+    pub run: usize,
 }
 
 impl SystemState {
@@ -43,7 +45,11 @@ impl SystemState {
             decisions: decisions_broker.stream(),
         };
 
-        SystemState { cohorts, certifier, run: 0 }
+        SystemState {
+            cohorts,
+            certifier,
+            run: 0,
+        }
     }
 }
 
@@ -76,6 +82,12 @@ pub struct Cohort {
     pub replica: Replica,
     pub candidates: Stream<CandidateMessage<Statemap>>,
     pub decisions: Stream<DecisionMessage<Statemap>>,
+}
+
+impl Cohort {
+    // pub fn total_txns() {
+    //     candidates.
+    // }
 }
 
 #[derive(Debug)]
@@ -206,10 +218,57 @@ impl<M> Stream<M> {
     pub fn offset(&self) -> usize {
         self.offset
     }
+
+    pub fn low_watermark(&self) -> usize {
+        self.internals.borrow().base
+    }
+
+    pub fn high_watermark(&self) -> usize {
+        let internals = self.internals.borrow();
+        internals.base + internals.messages.len()
+    }
+
+    pub fn len(&self) -> usize {
+        self.internals.borrow().messages.len()
+    }
 }
 
-pub fn uuidify(pid: usize, run: usize) -> Uuid {
-    Uuid::from_u128((pid as u128) << 64 | run as u128)
+pub fn uuidify<T>(pid: T, run: T) -> Uuid
+    where T: TryInto<u64>, <T as TryInto<u64>>::Error: Debug {
+    try_uuidify(pid, run).unwrap()
+}
+
+pub fn try_uuidify<T>(pid: T, run: T) -> Result<Uuid, <T as TryInto<u64>>::Error> where T: TryInto<u64> {
+    Ok(Uuid::from_u128((pid.try_into()? as u128) << 64 | run.try_into()? as u128))
+}
+
+// pub trait TruncateU64 {
+//     fn trunc(self) -> u64;
+// }
+//
+// impl TruncateU64 for usize {
+//     fn trunc(self) -> u64 {
+//         self as u64
+//     }
+// }
+//
+// pub fn uuidify<P, R>(pid: P, run: R) -> Uuid
+// where
+//     P: TruncateU64,
+//     R: TruncateU64,
+// {
+//     Uuid::from_u128((pid.trunc() as u128) << 64 | run.trunc() as u128)
+// }
+
+// pub fn try_uuidify<T>(pid: T, run: T) -> Result<Uuid, <T as TryInto<u64>>::Error> where T: TryInto<u64> {
+//     Ok(Uuid::from_u128((pid.try_into()? as u128) << 64 | run.try_into()? as u128))
+// }
+
+pub fn deuuid(uuid: Uuid) -> (usize, usize) {
+    let val = uuid.as_u128();
+    let pid = (val >> 64) as usize;
+    let run = val as usize;
+    (pid, run)
 }
 
 pub fn timed<F, R>(f: F) -> (R, Duration)
@@ -323,9 +382,9 @@ pub fn updater_action<S, A>(
     cohort_index: usize,
     asserter: A,
 ) -> impl Fn(&mut S, &mut dyn Context) -> ActionResult
-    where
-        S: CohortState,
-        A: Fn(&Replica) -> Option<String>,
+where
+    S: CohortState,
+    A: Fn(&Replica) -> Option<String>,
 {
     move |s, c| {
         let cohort = &mut s.cohorts()[cohort_index];
@@ -342,11 +401,9 @@ pub fn updater_action<S, A>(
             log::trace!("Installable {:?}", installable_commits);
             let (_, commit) = rand_element(c, &installable_commits);
             let commit = commit.as_commit().unwrap();
-            cohort.replica.install_ooo(
-                &commit.statemap,
-                commit.safepoint,
-                commit.candidate.ver,
-            );
+            cohort
+                .replica
+                .install_ooo(&commit.statemap, commit.safepoint, commit.candidate.ver);
             if let Some(error) = asserter(&cohort.replica) {
                 return Breached(error);
             }
@@ -422,17 +479,16 @@ where
 }
 
 pub fn supervisor_action<S>(
-    txns_per_cohort: usize,
+    expected_txns: usize,
 ) -> impl Fn(&mut S, &mut dyn Context) -> ActionResult
 where
     S: CohortState,
 {
     move |s, _| {
         let cohorts = s.cohorts();
-        let expect_txns = cohorts.len() * txns_per_cohort;
         let finished_cohorts = cohorts
             .iter()
-            .filter(|&cohort| cohort.decisions.offset() == expect_txns + 1)
+            .filter(|&cohort| cohort.decisions.offset() == expected_txns + 1)
             .count();
         if finished_cohorts == cohorts.len() {
             Joined
