@@ -233,60 +233,49 @@ impl<M> Stream<M> {
     }
 }
 
-pub fn uuidify<T>(pid: T, run: T) -> Uuid
+pub fn uuidify<P, R>(pid: P, run: R) -> Uuid
 where
-    T: TryInto<u64>,
-    <T as TryInto<u64>>::Error: Debug,
+    P: TryInto<u64>,
+    R: TryInto<u64>,
+    <P as TryInto<u64>>::Error: Debug,
+    <R as TryInto<u64>>::Error: Debug,
 {
     try_uuidify(pid, run).unwrap()
 }
 
-pub fn try_uuidify<T>(pid: T, run: T) -> Result<Uuid, <T as TryInto<u64>>::Error>
-where
-    T: TryInto<u64>,
-{
-    Ok(Uuid::from_u128(
-        (pid.try_into()? as u128) << 64 | run.try_into()? as u128,
-    ))
+#[derive(Debug)]
+pub enum Bimorphic<U, V> {
+    A(U), B(V)
 }
 
-// pub trait TruncateU64 {
-//     fn trunc(self) -> u64;
-// }
-//
-// impl TruncateU64 for usize {
-//     fn trunc(self) -> u64 {
-//         self as u64
-//     }
-// }
-//
-// pub fn uuidify<P, R>(pid: P, run: R) -> Uuid
-// where
-//     P: TruncateU64,
-//     R: TruncateU64,
-// {
-//     Uuid::from_u128((pid.trunc() as u128) << 64 | run.trunc() as u128)
-// }
-
-// pub fn try_uuidify<T>(pid: T, run: T) -> Result<Uuid, <T as TryInto<u64>>::Error> where T: TryInto<u64> {
-//     Ok(Uuid::from_u128((pid.try_into()? as u128) << 64 | run.try_into()? as u128))
-// }
-
-pub fn deuuid<T>(uuid: Uuid) -> (T, T)
+pub fn try_uuidify<P, R>(pid: P, run: R) -> Result<Uuid, Bimorphic<<P as TryInto<u64>>::Error, <R as TryInto<u64>>::Error>>
 where
-    T: TryFrom<u64>,
-    <T as TryFrom<u64>>::Error: Debug,
+    P: TryInto<u64>,
+    R: TryInto<u64>,
+{
+    let pid = pid.try_into().map_err(|err| Bimorphic::A(err))? as u128;
+    let run = run.try_into().map_err(|err| Bimorphic::B(err))? as u128;
+    Ok(Uuid::from_u128(pid << 64 | run))
+}
+
+pub fn deuuid<P, R>(uuid: Uuid) -> (P, R)
+where
+    P: TryFrom<u64>,
+    <P as TryFrom<u64>>::Error: Debug,
+    R: TryFrom<u64>,
+    <R as TryFrom<u64>>::Error: Debug,
 {
     try_deuuid(uuid).unwrap()
 }
 
-pub fn try_deuuid<T>(uuid: Uuid) -> Result<(T, T), <T as TryFrom<u64>>::Error>
+pub fn try_deuuid<P, R>(uuid: Uuid) -> Result<(P, R), Bimorphic<<P as TryFrom<u64>>::Error, <R as TryFrom<u64>>::Error>>
 where
-    T: TryFrom<u64>,
+    P: TryFrom<u64>,
+    R: TryFrom<u64>,
 {
     let val = uuid.as_u128();
-    let pid = <T>::try_from((val >> 64) as u64)?;
-    let run = <T>::try_from(val as u64)?;
+    let pid = <P>::try_from((val >> 64) as u64).map_err(|err| Bimorphic::A(err))?;
+    let run = <R>::try_from(val as u64).map_err(|err| Bimorphic::B(err))?;
     Ok((pid, run))
 }
 

@@ -1,8 +1,10 @@
 use crate::fixtures::{deuuid, uuidify, Broker, Replica, Statemap};
-use std::rc::Rc;
+use std::convert::{TryFrom, TryInto};
+use std::fmt::Debug;
 use std::mem::size_of;
-use uuid::Uuid;
+use std::rc::Rc;
 use std::str::FromStr;
+use uuid::Uuid;
 
 #[test]
 fn replica_install_items() {
@@ -165,52 +167,60 @@ fn stream_produce_consume_with_offset() {
     assert_eq!(None, s1.consume());
 }
 
+#[derive(Debug)]
+struct UuidExpectation<'a, P, R> {
+    pid: P,
+    run: R,
+    str: &'a str,
+}
+
+fn test_uuid<P, R>(expectations: &[UuidExpectation<P, R>])
+where
+    P: TryInto<u64> + TryFrom<u64> + Copy + Debug + Eq,
+    <P as TryInto<u64>>::Error: Debug,
+    <P as TryFrom<u64>>::Error: Debug,
+    R: TryInto<u64> + TryFrom<u64> + Copy + Debug + Eq,
+    <R as TryFrom<u64>>::Error: Debug,
+    <R as TryInto<u64>>::Error: Debug,
+{
+    for exp in expectations {
+        let uuid = uuidify(exp.pid, exp.run);
+        assert_eq!(exp.str, uuid.to_string(), "for {:?}", exp);
+        let (pid, run) = deuuid::<P, R>(uuid);
+        assert_eq!(exp.pid, pid, "for {:?}", exp);
+        assert_eq!(exp.run, run, "for {:?}", exp);
+    }
+}
+
 #[test]
 fn uuidify_deuuid_usize() {
-    #[derive(Debug)]
-    struct Expectation<'a> {
-        pid: usize,
-        run: usize,
-        str: &'a str,
-    }
-
-    fn test(expectations: &[Expectation]) {
-        for exp in expectations {
-            let uuid = uuidify(exp.pid, exp.run);
-            assert_eq!(exp.str, uuid.to_string(), "for {:?}", exp);
-            let (pid, run) = deuuid(uuid);
-            assert_eq!(exp.pid, pid, "for {:?}", exp);
-            assert_eq!(exp.run, run, "for {:?}", exp);
-        }
-    }
-
-    test(&[
-        Expectation {
+    test_uuid(&[
+        UuidExpectation::<usize, usize> {
             pid: 0,
             run: 0,
             str: "00000000-0000-0000-0000-000000000000",
         },
-        Expectation {
+        UuidExpectation::<usize, usize> {
             pid: 0,
             run: 1,
             str: "00000000-0000-0000-0000-000000000001",
         },
-        Expectation {
+        UuidExpectation::<usize, usize> {
             pid: 0,
             run: 0x76543210,
             str: "00000000-0000-0000-0000-000076543210",
         },
-        Expectation {
+        UuidExpectation::<usize, usize> {
             pid: 1,
             run: 0,
             str: "00000000-0000-0001-0000-000000000000",
         },
-        Expectation {
+        UuidExpectation::<usize, usize> {
             pid: 0x76543210,
             run: 0,
             str: "00000000-7654-3210-0000-000000000000",
         },
-        Expectation {
+        UuidExpectation::<usize, usize> {
             pid: 0x76543210,
             run: 0xfedcba98,
             str: "00000000-7654-3210-0000-0000fedcba98",
@@ -219,13 +229,13 @@ fn uuidify_deuuid_usize() {
 
     // conditional on 64-bit architecture
     if size_of::<usize>() == 8 {
-        test(&[
-            Expectation {
+        test_uuid(&[
+            UuidExpectation::<usize, usize> {
                 pid: 0,
                 run: 0xfedcba9876543210,
                 str: "00000000-0000-0000-fedc-ba9876543210",
             },
-            Expectation {
+            UuidExpectation::<usize, usize> {
                 pid: 0xfedcba9876543210,
                 run: 0,
                 str: "fedcba98-7654-3210-0000-000000000000",
@@ -236,43 +246,46 @@ fn uuidify_deuuid_usize() {
 
 #[test]
 fn uuidify_deuuid_i32() {
-    let uuid = uuidify(5i16, 6i16);
-    assert_eq!("00000000-0000-0005-0000-000000000006", uuid.to_string());
-    let (pid, run) = deuuid(uuid);
-    assert_eq!(5, pid);
-    assert_eq!(6, run);
+    test_uuid(&[UuidExpectation {
+        pid: 5i16,
+        run: 6i16,
+        str: "00000000-0000-0005-0000-000000000006",
+    }]);
 }
 
-#[test] #[should_panic]
+#[test]
+#[should_panic]
 fn uuidify_i32_negative() {
     uuidify(5i16, -6i16);
 }
 
 #[test]
 fn uuidify_deuuid_u128() {
-    let uuid = uuidify(0xffff_ffff_ffff_ffff_u128, 0xffff_ffff_ffff_ffff_u128);
-    assert_eq!("ffffffff-ffff-ffff-ffff-ffffffffffff", uuid.to_string());
-    let (pid, run) = deuuid(uuid);
-    assert_eq!(0xffffffffffffffff_u128, pid);
-    assert_eq!(0xffffffffffffffff_u128, run);
+    test_uuid(&[UuidExpectation {
+        pid: 0xffff_ffff_ffff_ffff_u128,
+        run: 0xffff_ffff_ffff_ffff_u128,
+        str: "ffffffff-ffff-ffff-ffff-ffffffffffff",
+    }]);
 }
 
-#[test] #[should_panic]
+#[test]
+#[should_panic]
 fn uuidify_u128_overflow() {
     uuidify(0xffff_ffff_ffff_ffff_u128, 0x1_0000_0000_0000_0000_u128);
 }
 
 #[test]
 fn uuidify_deuuid_u8() {
-    let uuid = uuidify(0xee_u8, 0xff_u8);
-    assert_eq!("00000000-0000-00ee-0000-0000000000ff", uuid.to_string());
-    let (pid, run) = deuuid::<u8>(uuid);
-    assert_eq!(0xee, pid);
-    assert_eq!(0xff, run);
+    test_uuid(&[UuidExpectation {
+        pid: 0xee_u8,
+        run: 0xff_u8,
+        str: "00000000-0000-00ee-0000-0000000000ff",
+    }]);
 }
 
-#[test] #[should_panic]
+#[test]
+#[should_panic]
 fn deuuid_u8_overflow() {
     let uuid = Uuid::from_str("00000000-0000-0000-0000-000000000100").unwrap();
-    deuuid::<u8>(uuid);
+    deuuid::<u8, u8>(uuid);
 }
