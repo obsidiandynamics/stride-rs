@@ -1,12 +1,10 @@
 use std::rc::Rc;
 
-use fixtures::*;
+use super::fixtures::*;
 use stride::havoc::model::ActionResult::{Joined, Ran};
 use stride::havoc::model::Retention::{Strong, Weak};
 use stride::havoc::model::{name_of, Model};
 use stride::*;
-
-mod fixtures;
 
 fn asserter(num_values: usize) -> impl Fn(&Replica) -> Option<String> {
     move |r| {

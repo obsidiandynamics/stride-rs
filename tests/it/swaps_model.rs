@@ -1,13 +1,11 @@
 use std::borrow::Borrow;
 use std::rc::Rc;
 
-use fixtures::*;
+use super::fixtures::*;
 use stride::havoc::model::ActionResult::{Blocked, Breached, Joined, Ran};
 use stride::havoc::model::Retention::{Strong, Weak};
 use stride::havoc::model::{name_of, rand_element, Model};
 use stride::*;
-
-mod fixtures;
 
 fn asserter(values: &[i32]) -> impl Fn(&Replica) -> Option<String> {
     let expected_product: i32 = values.iter().product();
