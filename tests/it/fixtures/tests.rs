@@ -1,6 +1,8 @@
 use crate::fixtures::{deuuid, uuidify, Broker, Replica, Statemap};
 use std::rc::Rc;
 use std::mem::size_of;
+use uuid::Uuid;
+use std::str::FromStr;
 
 #[test]
 fn replica_install_items() {
@@ -164,7 +166,7 @@ fn stream_produce_consume_with_offset() {
 }
 
 #[test]
-fn uuidify_usize() {
+fn uuidify_deuuid_usize() {
     #[derive(Debug)]
     struct Expectation<'a> {
         pid: usize,
@@ -233,7 +235,44 @@ fn uuidify_usize() {
 }
 
 #[test]
-fn uuidify_other() {
+fn uuidify_deuuid_i32() {
     let uuid = uuidify(5i16, 6i16);
     assert_eq!("00000000-0000-0005-0000-000000000006", uuid.to_string());
+    let (pid, run) = deuuid(uuid);
+    assert_eq!(5, pid);
+    assert_eq!(6, run);
+}
+
+#[test] #[should_panic]
+fn uuidify_i32_negative() {
+    uuidify(5i16, -6i16);
+}
+
+#[test]
+fn uuidify_deuuid_u128() {
+    let uuid = uuidify(0xffff_ffff_ffff_ffff_u128, 0xffff_ffff_ffff_ffff_u128);
+    assert_eq!("ffffffff-ffff-ffff-ffff-ffffffffffff", uuid.to_string());
+    let (pid, run) = deuuid(uuid);
+    assert_eq!(0xffffffffffffffff_u128, pid);
+    assert_eq!(0xffffffffffffffff_u128, run);
+}
+
+#[test] #[should_panic]
+fn uuidify_u128_overflow() {
+    uuidify(0xffff_ffff_ffff_ffff_u128, 0x1_0000_0000_0000_0000_u128);
+}
+
+#[test]
+fn uuidify_deuuid_u8() {
+    let uuid = uuidify(0xee_u8, 0xff_u8);
+    assert_eq!("00000000-0000-00ee-0000-0000000000ff", uuid.to_string());
+    let (pid, run) = deuuid::<u8>(uuid);
+    assert_eq!(0xee, pid);
+    assert_eq!(0xff, run);
+}
+
+#[test] #[should_panic]
+fn deuuid_u8_overflow() {
+    let uuid = Uuid::from_str("00000000-0000-0000-0000-000000000100").unwrap();
+    deuuid::<u8>(uuid);
 }

@@ -9,6 +9,7 @@ use rand::RngCore;
 use uuid::Uuid;
 
 use std::convert::{TryFrom, TryInto};
+use std::fmt::Debug;
 use stride::havoc::checker::{CheckResult, Checker};
 use stride::havoc::model::ActionResult::{Blocked, Breached, Joined, Ran};
 use stride::havoc::model::{rand_element, ActionResult, Context, Model};
@@ -17,7 +18,6 @@ use stride::havoc::{checker, sim, Sublevel};
 use stride::{
     AbortMessage, Candidate, CandidateMessage, CommitMessage, DecisionMessage, Examiner, Outcome,
 };
-use std::fmt::Debug;
 
 #[derive(Debug)]
 pub struct SystemState {
@@ -234,12 +234,20 @@ impl<M> Stream<M> {
 }
 
 pub fn uuidify<T>(pid: T, run: T) -> Uuid
-    where T: TryInto<u64>, <T as TryInto<u64>>::Error: Debug {
+where
+    T: TryInto<u64>,
+    <T as TryInto<u64>>::Error: Debug,
+{
     try_uuidify(pid, run).unwrap()
 }
 
-pub fn try_uuidify<T>(pid: T, run: T) -> Result<Uuid, <T as TryInto<u64>>::Error> where T: TryInto<u64> {
-    Ok(Uuid::from_u128((pid.try_into()? as u128) << 64 | run.try_into()? as u128))
+pub fn try_uuidify<T>(pid: T, run: T) -> Result<Uuid, <T as TryInto<u64>>::Error>
+where
+    T: TryInto<u64>,
+{
+    Ok(Uuid::from_u128(
+        (pid.try_into()? as u128) << 64 | run.try_into()? as u128,
+    ))
 }
 
 // pub trait TruncateU64 {
@@ -264,11 +272,22 @@ pub fn try_uuidify<T>(pid: T, run: T) -> Result<Uuid, <T as TryInto<u64>>::Error
 //     Ok(Uuid::from_u128((pid.try_into()? as u128) << 64 | run.try_into()? as u128))
 // }
 
-pub fn deuuid(uuid: Uuid) -> (usize, usize) {
+pub fn deuuid<T>(uuid: Uuid) -> (T, T)
+where
+    T: TryFrom<u64>,
+    <T as TryFrom<u64>>::Error: Debug,
+{
+    try_deuuid(uuid).unwrap()
+}
+
+pub fn try_deuuid<T>(uuid: Uuid) -> Result<(T, T), <T as TryFrom<u64>>::Error>
+where
+    T: TryFrom<u64>,
+{
     let val = uuid.as_u128();
-    let pid = (val >> 64) as usize;
-    let run = val as usize;
-    (pid, run)
+    let pid = <T>::try_from((val >> 64) as u64)?;
+    let run = <T>::try_from(val as u64)?;
+    Ok((pid, run))
 }
 
 pub fn timed<F, R>(f: F) -> (R, Duration)
