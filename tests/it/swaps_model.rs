@@ -245,7 +245,6 @@ fn sim_swaps_2x2() {
 }
 
 #[test]
-#[ignore]
 fn sim_swaps_3x1() {
     sim(
         &build_model(
@@ -254,12 +253,11 @@ fn sim_swaps_3x1() {
             1,
             name_of(&sim_swaps_3x1),
         ),
-        1_000_000,
+        100,
     );
 }
 
 #[test]
-#[ignore]
 fn sim_swaps_3x2() {
     sim(
         &build_model(
@@ -268,12 +266,11 @@ fn sim_swaps_3x2() {
             2,
             name_of(&sim_swaps_3x2),
         ),
-        1_000_000,
+        100,
     );
 }
 
 #[test]
-#[ignore]
 fn sim_swaps_4x1() {
     sim(
         &build_model(
@@ -282,12 +279,11 @@ fn sim_swaps_4x1() {
             1,
             name_of(&sim_swaps_4x1),
         ),
-        1_000_000,
+        100,
     );
 }
 
 #[test]
-#[ignore]
 fn sim_swaps_4x2() {
     sim(
         &build_model(
@@ -296,6 +292,6 @@ fn sim_swaps_4x2() {
             2,
             name_of(&sim_swaps_4x2),
         ),
-        1_000_000,
+        100,
     );
 }
