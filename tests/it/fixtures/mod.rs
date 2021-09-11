@@ -21,6 +21,7 @@ use stride::{
 pub struct SystemState {
     pub cohorts: Vec<Cohort>,
     pub certifier: Certifier,
+    pub run: usize
 }
 
 impl SystemState {
@@ -42,7 +43,7 @@ impl SystemState {
             decisions: decisions_broker.stream(),
         };
 
-        SystemState { cohorts, certifier }
+        SystemState { cohorts, certifier, run: 0 }
     }
 }
 

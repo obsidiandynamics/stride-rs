@@ -85,7 +85,7 @@ fn build_model<'a>(
 
 #[test]
 fn dfs_pebbles_1x1() {
-    dfs(&build_model(1, 1, 1, name_of(&dfs_pebbles_1x1)));
+    dfs(&build_model(2, 1, 1, name_of(&dfs_pebbles_1x1)));
 }
 
 #[test]
