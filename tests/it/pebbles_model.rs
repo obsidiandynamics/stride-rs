@@ -112,30 +112,30 @@ fn sim_pebbles_1x1() {
 
 #[test]
 fn sim_pebbles_2x1() {
-    sim(&build_model(2, 2, 1, name_of(&sim_pebbles_2x1)), 100);
+    sim(&build_model(2, 2, 1, name_of(&sim_pebbles_2x1)), 20);
 }
 
 #[test]
 fn sim_pebbles_2x2() {
-    sim(&build_model(2, 2, 2, name_of(&sim_pebbles_2x2)), 100);
+    sim(&build_model(2, 2, 2, name_of(&sim_pebbles_2x2)), 40);
 }
 
 #[test]
 fn sim_pebbles_3x1() {
-    sim(&build_model(2, 3, 1, name_of(&sim_pebbles_3x1)), 100);
+    sim(&build_model(2, 3, 1, name_of(&sim_pebbles_3x1)), 40);
 }
 
 #[test]
 fn sim_pebbles_3x2() {
-    sim(&build_model(2, 3, 2, name_of(&sim_pebbles_3x2)), 100);
+    sim(&build_model(2, 3, 2, name_of(&sim_pebbles_3x2)), 80);
 }
 
 #[test]
 fn sim_pebbles_4x1() {
-    sim(&build_model(2, 4, 1, name_of(&sim_pebbles_4x1)), 100);
+    sim(&build_model(2, 4, 1, name_of(&sim_pebbles_4x1)), 80);
 }
 
 #[test]
 fn sim_pebbles_4x2() {
-    sim(&build_model(2, 4, 2, name_of(&sim_pebbles_4x2)), 100);
+    sim(&build_model(2, 4, 2, name_of(&sim_pebbles_4x2)), 160);
 }
