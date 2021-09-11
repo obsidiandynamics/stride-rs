@@ -35,6 +35,7 @@ fn build_model<'a>(
     for (cohort_index, &(p, q)) in combos.iter().enumerate() {
         let itemset = [format!("item-{}", p), format!("item-{}", q)];
         model.add_action(format!("initiator-{}", cohort_index), Weak, move |s, _| {
+            let run = s.cohort_txns(cohort_index);
             let cohort = &mut s.cohorts[cohort_index];
             let ((old_p_val, old_p_ver), (old_q_val, old_q_ver)) =
                 (cohort.replica.items[p], cohort.replica.items[q]);
@@ -44,7 +45,7 @@ fn build_model<'a>(
             let (readvers, snapshot) = Record::compress(cpt_readvers, cpt_snapshot);
             cohort.candidates.produce(Rc::new(CandidateMessage {
                 rec: Record {
-                    xid: uuidify(cohort_index, cohort.run),
+                    xid: uuidify(cohort_index, run),
                     readset: itemset.to_vec(),
                     writeset: itemset.to_vec(),
                     readvers,
@@ -52,8 +53,7 @@ fn build_model<'a>(
                 },
                 statemap,
             }));
-            cohort.run += 1;
-            if cohort.run == txns_per_cohort {
+            if run + 1 == txns_per_cohort {
                 Joined
             } else {
                 Ran

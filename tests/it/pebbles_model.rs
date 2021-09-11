@@ -35,6 +35,7 @@ fn build_model<'a>(
         // each cohort is assigned a specific 'to' color
         let target_color = (cohort_index % 2) as i32;
         model.add_action(format!("initiator-{}", cohort_index), Weak, move |s, _| {
+            let run = s.cohort_txns(cohort_index);
             let cohort = &mut s.cohorts[cohort_index];
             let readset = itemset.clone();
             let cpt_readvers: Vec<u64> = cohort
@@ -50,17 +51,17 @@ fn build_model<'a>(
                 .iter()
                 .enumerate()
                 .filter(|(_, &(item_val, _))| item_val != target_color)
-                .map(|(item_index, _)| (item_index, target_color))
+                .map(|(item, _)| (item, target_color))
                 .collect();
             let writeset: Vec<String> = changes
                 .iter()
-                .map(|&(item_index, _)| itemset[item_index].clone())
+                .map(|&(item, _)| itemset[item].clone())
                 .collect();
             let (readvers, snapshot) = Record::compress(cpt_readvers, cpt_snapshot);
             let statemap = Statemap::new(changes);
             cohort.candidates.produce(Rc::new(CandidateMessage {
                 rec: Record {
-                    xid: uuidify(cohort_index, cohort.run),
+                    xid: uuidify(cohort_index, run),
                     readset,
                     writeset,
                     readvers,
@@ -68,8 +69,7 @@ fn build_model<'a>(
                 },
                 statemap,
             }));
-            cohort.run += 1;
-            if cohort.run == txns_per_cohort {
+            if run + 1 == txns_per_cohort {
                 Joined
             } else {
                 Ran

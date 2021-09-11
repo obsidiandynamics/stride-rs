@@ -32,8 +32,9 @@ fn build_model<'a>(
         // each cohort is assigned a specific item
         let our_item = cohort_index % num_values;
         model.add_action(format!("off-{}", cohort_index), Weak, move |s, c| {
+            let run = s.total_txns();
             let cohort = &mut s.cohorts[cohort_index];
-            if s.run == expected_txns {
+            if run == expected_txns {
                 return Joined
             }
 
@@ -63,7 +64,7 @@ fn build_model<'a>(
             let statemap = Statemap::new(changes);
             cohort.candidates.produce(Rc::new(CandidateMessage {
                 rec: Record {
-                    xid: uuidify(cohort_index, cohort.run),
+                    xid: uuidify(cohort_index, run),
                     readset,
                     writeset,
                     readvers,
@@ -71,8 +72,7 @@ fn build_model<'a>(
                 },
                 statemap,
             }));
-            s.run += 1;
-            if s.run == expected_txns {
+            if run + 1 == expected_txns {
                 Joined
             } else {
                 Ran
@@ -82,8 +82,9 @@ fn build_model<'a>(
         let itemset: Vec<String> = (0..num_values).map(|i| format!("item-{}", i)).collect();
         let our_item = cohort_index % num_values;
         model.add_action(format!("on-{}", cohort_index), Weak, move |s, _| {
+            let run = s.total_txns();
             let cohort = &mut s.cohorts[cohort_index];
-            if s.run == expected_txns {
+            if run == expected_txns {
                 return Joined
             }
 
@@ -102,7 +103,7 @@ fn build_model<'a>(
             let statemap = Statemap::new(changes);
             cohort.candidates.produce(Rc::new(CandidateMessage {
                 rec: Record {
-                    xid: uuidify(cohort_index, cohort.run),
+                    xid: uuidify(cohort_index, run),
                     readset,
                     writeset,
                     readvers,
@@ -110,8 +111,7 @@ fn build_model<'a>(
                 },
                 statemap,
             }));
-            s.run += 1;
-            if s.run == expected_txns {
+            if run + 1 == expected_txns {
                 Joined
             } else {
                 Ran

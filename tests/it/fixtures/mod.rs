@@ -23,7 +23,6 @@ use stride::{
 pub struct SystemState {
     pub cohorts: Vec<Cohort>,
     pub certifier: Certifier,
-    pub run: usize,
 }
 
 impl SystemState {
@@ -33,7 +32,6 @@ impl SystemState {
         let cohorts = (0..num_cohorts)
             .into_iter()
             .map(|_| Cohort {
-                run: 0,
                 replica: Replica::new(&values),
                 candidates: candidates_broker.stream(),
                 decisions: decisions_broker.stream(),
@@ -48,8 +46,18 @@ impl SystemState {
         SystemState {
             cohorts,
             certifier,
-            run: 0,
         }
+    }
+
+    pub fn total_txns(&self) -> usize {
+        self.certifier.candidates.len()
+    }
+
+    pub fn cohort_txns(&self, cohort_index: usize) -> usize {
+        self.certifier.candidates.count(|msg| {
+            let (pid, _) = deuuid::<usize, usize>(msg.rec.xid);
+            pid == cohort_index
+        })
     }
 }
 
@@ -78,16 +86,9 @@ impl Statemap {
 
 #[derive(Debug)]
 pub struct Cohort {
-    pub run: usize,
     pub replica: Replica,
     pub candidates: Stream<CandidateMessage<Statemap>>,
     pub decisions: Stream<DecisionMessage<Statemap>>,
-}
-
-impl Cohort {
-    // pub fn total_txns() {
-    //     candidates.
-    // }
 }
 
 #[derive(Debug)]
@@ -214,6 +215,20 @@ impl<M> Stream<M> {
             .map(|(i, m)| (i + base, Rc::clone(&m)))
             .collect()
     }
+
+    pub fn count<P>(&self, predicate: P) -> usize
+        where
+            P: Fn(&M) -> bool,
+    {
+        let internals = &self.internals.borrow();
+        let messages = &internals.messages;
+        messages
+            .iter()
+            .enumerate()
+            .filter(|&(_, m)| predicate(m.deref()))
+            .count()
+    }
+
 
     pub fn offset(&self) -> usize {
         self.offset
