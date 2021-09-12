@@ -353,11 +353,11 @@ pub fn dfs<S>(model: &Model<S>) {
         stats
     );
     if let CheckResult::Fail(fail) = &result {
-        log::error!("trace:\n{}", fail.trace.prettify(&model));
+        log::error!("fail trace:\n{}", fail.trace.prettify(&model));
     } else if let CheckResult::Deadlock(deadlock) = &result {
-        log::error!("trace:\n{}", deadlock.trace.prettify(&model));
+        log::error!("deadlock trace:\n{}", deadlock.trace.prettify(&model));
     }
-    assert!(matches!(result, CheckResult::Pass(_)));
+    assert!(matches!(result, CheckResult::Pass(_)), "{:?}", result);
 }
 
 pub fn sim<S>(model: &Model<S>, max_schedules: usize) {
@@ -387,11 +387,11 @@ pub fn sim<S>(model: &Model<S>, max_schedules: usize) {
         rate_s
     );
     if let SimResult::Fail(fail) = &result {
-        log::error!("trace:\n{}", fail.trace.prettify(&model));
+        log::error!("fail trace:\n{}", fail.trace.prettify(&model));
     } else if let SimResult::Deadlock(deadlock) = &result {
-        log::error!("trace:\n{}", deadlock.trace.prettify(&model));
+        log::error!("deadlock trace:\n{}", deadlock.trace.prettify(&model));
     }
-    assert_eq!(SimResult::Pass, result);
+    assert_eq!(SimResult::Pass, result, "{:?}", result);
 }
 
 pub trait CohortState {

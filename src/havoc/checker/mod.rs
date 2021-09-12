@@ -350,7 +350,7 @@ impl<'a, S> Checker<'a, S> {
                     } else {
                         if top.index + 1 == self.model.actions.len() {
                             if sublevel.allows(Sublevel::Finest) {
-                                log::trace!("      abandoned run");
+                                log::trace!("      discarded run");
                             }
                             self.stats.steps += self.depth;
                             if self.depth > self.stats.deepest {
@@ -360,7 +360,7 @@ impl<'a, S> Checker<'a, S> {
                                 None => {
                                     if sublevel.allows(Sublevel::Fine) {
                                         log::trace!(
-                                            "  passed with {:?} (last run abandoned)",
+                                            "  passed with {:?} (last run discarded)",
                                             self.stats
                                         );
                                     }
