@@ -10,7 +10,7 @@ use stride::*;
 fn asserter(values: &[i32]) -> impl Fn(&Replica) -> Option<String> {
     let expected_product: i32 = values.iter().product();
     move |r| {
-        let computed_product: i32 = r.items.iter().map(|(item, _)| *item).product();
+        let computed_product: i32 = r.items.iter().map(|&(item_val, _)| item_val).product();
         if expected_product != computed_product {
             Some(format!(
                 "expected: {}, computed: {} for {:?}",

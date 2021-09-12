@@ -8,7 +8,7 @@ use stride::*;
 
 fn asserter() -> impl Fn(&Replica) -> Option<String> {
     |r| {
-        if !r.items.iter().any(|&(item, _)| item != 0) {
+        if !r.items.iter().any(|&(item_val, _)| item_val != 0) {
             Some("blank roster".into())
         } else {
             None

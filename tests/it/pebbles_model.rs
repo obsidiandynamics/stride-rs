@@ -8,7 +8,7 @@ use stride::*;
 
 fn asserter(num_values: usize) -> impl Fn(&Replica) -> Option<String> {
     move |r| {
-        let computed_sum: usize = r.items.iter().map(|(item, _)| *item as usize).sum();
+        let computed_sum: usize = r.items.iter().map(|&(item_val, _)| item_val as usize).sum();
         if computed_sum != 0 && computed_sum != num_values {
             Some(format!(
                 "expected: 0 or {}, computed: {} for {:?}",

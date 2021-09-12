@@ -346,10 +346,11 @@ pub fn dfs<S>(model: &Model<S>) {
     let per_schedule = elapsed.div(stats.executed as u32);
     let rate_s = 1_000_000_000 as f64 / per_schedule.as_nanos() as f64;
     log::debug!(
-        "took {:?} ({:?}/schedule, {:.3} schedules/sec)",
+        "took {:?} ({:?}/schedule, {:.3} schedules/sec) {:?}",
         elapsed,
         per_schedule,
-        rate_s
+        rate_s,
+        stats
     );
     if let CheckResult::Fail(fail) = &result {
         log::error!("trace:\n{}", fail.trace.prettify(&model));
@@ -483,7 +484,7 @@ where
                     ver: offset as u64,
                 };
                 let outcome = certifier.examiner.assess(&candidate);
-                log::trace!("Certified {:?} with {:?}", candidate, outcome);
+                log::trace!("Certified {:?} {:?} with {:?}", candidate, &candidate_message.statemap, outcome);
                 let decision_message = match outcome {
                     Outcome::Commit(safepoint, _) => DecisionMessage::Commit(CommitMessage {
                         candidate,
