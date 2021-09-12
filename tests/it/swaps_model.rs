@@ -1,24 +1,27 @@
-use std::borrow::Borrow;
 use std::rc::Rc;
 
-use super::fixtures::*;
-use stride::havoc::model::ActionResult::{Blocked, Breached, Joined, Ran};
-use stride::havoc::model::Retention::{Strong, Weak};
-use stride::havoc::model::{name_of, rand_element, Model};
 use stride::*;
+use stride::havoc::model::{Model, name_of};
+use stride::havoc::model::ActionResult::{Blocked, Joined, Ran};
+use stride::havoc::model::Retention::{Strong, Weak};
 
-fn asserter(values: &[i32]) -> impl Fn(&Replica) -> Option<String> {
+use super::fixtures::*;
+
+fn asserter(values: &[i32], cohort_index: usize) -> impl Fn(&[Cohort]) -> Box<dyn Fn(&[Cohort]) -> Option<String>> {
     let expected_product: i32 = values.iter().product();
-    move |r| {
-        let computed_product: i32 = r.items.iter().map(|&(item_val, _)| item_val).product();
-        if expected_product != computed_product {
-            Some(format!(
-                "expected: {}, computed: {} for {:?}",
-                expected_product, computed_product, r
-            ))
-        } else {
-            None
-        }
+    move |_| {
+        Box::new(move |after| {
+            let replica = &after[cohort_index].replica;
+            let computed_product: i32 = replica.items.iter().map(|&(item_val, _)| item_val).product();
+            if expected_product != computed_product {
+                Some(format!(
+                    "expected: {}, computed: {} for {:?}",
+                    expected_product, computed_product, replica
+                ))
+            } else {
+                None
+            }
+        })
     }
 }
 
@@ -59,60 +62,8 @@ fn build_model<'a>(
                 Ran
             }
         });
-
-        let _asserter = asserter(values);
-        model.add_action(format!("updater-{}", cohort_index), Weak, move |s, c| {
-            let cohort = &mut s.cohorts[cohort_index];
-            let installable_commits = cohort.decisions.find(|decision| match decision {
-                DecisionMessage::Commit(commit) => cohort.replica.can_install_ooo(
-                    &commit.statemap,
-                    commit.safepoint,
-                    commit.candidate.ver,
-                ),
-                DecisionMessage::Abort(_) => false,
-            });
-
-            if !installable_commits.is_empty() {
-                log::trace!("Installable {:?}", installable_commits);
-                let (_, commit) = rand_element(c, &installable_commits);
-                let commit = commit.as_commit().unwrap();
-                cohort.replica.install_ooo(
-                    &commit.statemap,
-                    commit.safepoint,
-                    commit.candidate.ver,
-                );
-                if let Some(error) = _asserter(&cohort.replica) {
-                    return Breached(error);
-                }
-                Ran
-            } else {
-                Blocked
-            }
-        });
-
-        let _asserter = asserter(values);
-        model.add_action(format!("replicator-{}", cohort_index), Weak, move |s, _| {
-            let cohort = &mut s.cohorts[cohort_index];
-            match cohort.decisions.consume() {
-                None => Blocked,
-                Some((_, decision)) => {
-                    match decision.borrow() {
-                        DecisionMessage::Commit(commit) => {
-                            cohort
-                                .replica
-                                .install_ser(&commit.statemap, commit.candidate.ver);
-                            if let Some(error) = _asserter(&cohort.replica) {
-                                return Breached(error);
-                            }
-                        }
-                        DecisionMessage::Abort(abort) => {
-                            log::trace!("ABORTED {:?}", abort.reason);
-                        }
-                    }
-                    Ran
-                }
-            }
-        });
+        model.add_action(format!("updater-{}", cohort_index), Weak, updater_action(cohort_index, asserter(values, cohort_index)));
+        model.add_action(format!("replicator-{}", cohort_index), Weak, replicator_action(cohort_index, asserter(values, cohort_index)));
     }
 
     model.add_action("certifier".into(), Weak, |s, _| {

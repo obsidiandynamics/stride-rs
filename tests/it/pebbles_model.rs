@@ -6,17 +6,20 @@ use stride::havoc::model::Retention::{Strong, Weak};
 use stride::havoc::model::{name_of, Model};
 use stride::*;
 
-fn asserter(num_values: usize) -> impl Fn(&Replica) -> Option<String> {
-    move |r| {
-        let computed_sum: usize = r.items.iter().map(|&(item_val, _)| item_val as usize).sum();
-        if computed_sum != 0 && computed_sum != num_values {
-            Some(format!(
-                "expected: 0 or {}, computed: {} for {:?}",
-                num_values, computed_sum, r
-            ))
-        } else {
-            None
-        }
+fn asserter(num_values: usize, cohort_index: usize) -> impl Fn(&[Cohort]) -> Box<dyn Fn(&[Cohort]) -> Option<String>> {
+    move |_| {
+        Box::new(move |after| {
+            let replica = &after[cohort_index].replica;
+            let computed_sum: usize = replica.items.iter().map(|&(item_val, _)| item_val as usize).sum();
+            if computed_sum != 0 && computed_sum != num_values {
+                Some(format!(
+                    "expected: 0 or {}, computed: {} for {:?}",
+                    num_values, computed_sum, replica
+                ))
+            } else {
+                None
+            }
+        })
     }
 }
 
@@ -75,8 +78,8 @@ fn build_model<'a>(
                 Ran
             }
         });
-        model.add_action(format!("updater-{}", cohort_index), Weak, updater_action(cohort_index, asserter(num_values)));
-        model.add_action(format!("replicator-{}", cohort_index), Weak, replicator_action(cohort_index, asserter(num_values)));
+        model.add_action(format!("updater-{}", cohort_index), Weak, updater_action(cohort_index, asserter(num_values, cohort_index)));
+        model.add_action(format!("replicator-{}", cohort_index), Weak, replicator_action(cohort_index, asserter(num_values, cohort_index)));
     }
     model.add_action("certifier".into(), Weak, certifier_action());
     model.add_action("supervisor".into(), Strong, supervisor_action(num_cohorts * txns_per_cohort));

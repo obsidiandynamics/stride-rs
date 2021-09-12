@@ -408,27 +408,31 @@ pub fn updater_action<S, A>(
 ) -> impl Fn(&mut S, &mut dyn Context) -> ActionResult
 where
     S: CohortState,
-    A: Fn(&Replica) -> Option<String>,
+    A: Fn(&[Cohort]) -> Box<dyn Fn(&[Cohort]) -> Option<String>>,
 {
     move |s, c| {
-        let cohort = &mut s.cohorts()[cohort_index];
-        let installable_commits = cohort.decisions.find(|decision| match decision {
-            DecisionMessage::Commit(commit) => cohort.replica.can_install_ooo(
-                &commit.statemap,
-                commit.safepoint,
-                commit.candidate.ver,
-            ),
-            DecisionMessage::Abort(_) => false,
-        });
+        let installable_commits = {
+            let cohort = &mut s.cohorts()[cohort_index];
+            cohort.decisions.find(|decision| match decision {
+                DecisionMessage::Commit(commit) => cohort.replica.can_install_ooo(
+                    &commit.statemap,
+                    commit.safepoint,
+                    commit.candidate.ver,
+                ),
+                DecisionMessage::Abort(_) => false,
+            })
+        };
 
         if !installable_commits.is_empty() {
             log::trace!("Installable {:?}", installable_commits);
             let (_, commit) = rand_element(c, &installable_commits);
+            let after_check = asserter(&s.cohorts());
+            let cohort = &mut s.cohorts()[cohort_index];
             let commit = commit.as_commit().unwrap();
             cohort
                 .replica
                 .install_ooo(&commit.statemap, commit.safepoint, commit.candidate.ver);
-            if let Some(error) = asserter(&cohort.replica) {
+            if let Some(error) = after_check(&s.cohorts()) {
                 return Breached(error);
             }
             Ran
@@ -444,19 +448,24 @@ pub fn replicator_action<S, A>(
 ) -> impl Fn(&mut S, &mut dyn Context) -> ActionResult
 where
     S: CohortState,
-    A: Fn(&Replica) -> Option<String>,
+    A: Fn(&[Cohort]) -> Box<dyn Fn(&[Cohort]) -> Option<String>>,
 {
     move |s, _| {
-        let cohort = &mut s.cohorts()[cohort_index];
-        match cohort.decisions.consume() {
+        let decision = {
+            let cohort = &mut s.cohorts()[cohort_index];
+            cohort.decisions.consume()
+        };
+        match decision {
             None => Blocked,
             Some((_, decision)) => {
                 match decision.deref() {
                     DecisionMessage::Commit(commit) => {
+                        let after_check = asserter(&s.cohorts());
+                        let cohort = &mut s.cohorts()[cohort_index];
                         cohort
                             .replica
                             .install_ser(&commit.statemap, commit.candidate.ver);
-                        if let Some(error) = asserter(&cohort.replica) {
+                        if let Some(error) = after_check(&s.cohorts()) {
                             return Breached(error);
                         }
                     }

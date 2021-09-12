@@ -6,13 +6,16 @@ use stride::havoc::model::Retention::{Strong, Weak};
 use stride::havoc::model::{name_of, Model, rand_element};
 use stride::*;
 
-fn asserter() -> impl Fn(&Replica) -> Option<String> {
-    |r| {
-        if !r.items.iter().any(|&(item_val, _)| item_val != 0) {
-            Some("blank roster".into())
-        } else {
-            None
-        }
+fn asserter(cohort_index: usize) -> impl Fn(&[Cohort]) -> Box<dyn Fn(&[Cohort]) -> Option<String>> {
+    move |_| {
+        Box::new(move |after| {
+            let replica = &after[cohort_index].replica;
+            if !replica.items.iter().any(|&(item_val, _)| item_val != 0) {
+                Some("blank roster".into())
+            } else {
+                None
+            }
+        })
     }
 }
 
@@ -117,8 +120,8 @@ fn build_model<'a>(
                 Ran
             }
         });
-        model.add_action(format!("updater-{}", cohort_index), Weak, updater_action(cohort_index, asserter()));
-        model.add_action(format!("replicator-{}", cohort_index), Weak, replicator_action(cohort_index, asserter()));
+        model.add_action(format!("updater-{}", cohort_index), Weak, updater_action(cohort_index, asserter(cohort_index)));
+        model.add_action(format!("replicator-{}", cohort_index), Weak, replicator_action(cohort_index, asserter(cohort_index)));
     }
     model.add_action("certifier".into(), Weak, certifier_action());
     model.add_action("supervisor".into(), Strong, supervisor_action(num_cohorts * txns_per_cohort));

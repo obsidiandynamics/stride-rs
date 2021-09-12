@@ -6,21 +6,24 @@ use stride::havoc::model::Retention::{Strong, Weak};
 use stride::havoc::model::{name_of, Model, rand_element};
 use stride::*;
 
-fn asserter(values: &[i32]) -> impl Fn(&Replica) -> Option<String> {
+fn asserter(values: &[i32], cohort_index: usize) -> impl Fn(&[Cohort]) -> Box<dyn Fn(&[Cohort]) -> Option<String>> {
     let expected_sum: i32 = values.iter().sum();
-    move |r| {
-        let mut computed_sum = 0;
-        for &(item_val, _) in &r.items {
-            if item_val < 0 {
-                return Some(format!("account negative: {:?}", r));
+    move |_| {
+        Box::new(move |after| {
+            let replica = &after[cohort_index].replica;
+            let mut computed_sum = 0;
+            for &(item_val, _) in &replica.items {
+                if item_val < 0 {
+                    return Some(format!("account negative: {:?}", replica));
+                }
+                computed_sum += item_val;
             }
-            computed_sum += item_val;
-        }
-        if expected_sum != computed_sum {
-            Some(format!("expected: {}, computed: {} for {:?}", expected_sum, computed_sum, r))
-        } else {
-            None
-        }
+            if expected_sum != computed_sum {
+                Some(format!("expected: {}, computed: {} for {:?}", expected_sum, computed_sum, replica))
+            } else {
+                None
+            }
+        })
     }
 }
 
@@ -82,8 +85,8 @@ fn build_model<'a>(
                 Ran
             }
         });
-        model.add_action(format!("updater-{}", cohort_index), Weak, updater_action(cohort_index, asserter(values)));
-        model.add_action(format!("replicator-{}", cohort_index), Weak, replicator_action(cohort_index, asserter(values)));
+        model.add_action(format!("updater-{}", cohort_index), Weak, updater_action(cohort_index, asserter(values, cohort_index)));
+        model.add_action(format!("replicator-{}", cohort_index), Weak, replicator_action(cohort_index, asserter(values, cohort_index)));
     }
     model.add_action("certifier".into(), Weak, certifier_action());
     model.add_action("supervisor".into(), Strong, supervisor_action(num_cohorts * txns_per_cohort));
