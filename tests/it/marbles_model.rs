@@ -87,58 +87,58 @@ fn build_model<'a>(
 }
 
 #[test]
-fn dfs_pebbles_1x1() {
-    dfs(&build_model(2, 1, 1, name_of(&dfs_pebbles_1x1)));
+fn dfs_marbles_1x1() {
+    dfs(&build_model(2, 1, 1, name_of(&dfs_marbles_1x1)));
 }
 
 #[test]
-fn dfs_pebbles_1x2() {
-    dfs(&build_model(2, 1, 2, name_of(&dfs_pebbles_1x2)));
-}
-
-#[test]
-#[ignore]
-fn dfs_pebbles_2x1() {
-    dfs(&build_model(2, 2, 1, name_of(&dfs_pebbles_2x1)));
+fn dfs_marbles_1x2() {
+    dfs(&build_model(2, 1, 2, name_of(&dfs_marbles_1x2)));
 }
 
 #[test]
 #[ignore]
-fn dfs_pebbles_2x2() {
-    dfs(&build_model(2, 2, 2, name_of(&dfs_pebbles_2x2)));
+fn dfs_marbles_2x1() {
+    dfs(&build_model(2, 2, 1, name_of(&dfs_marbles_2x1)));
 }
 
 #[test]
-fn sim_pebbles_1x1() {
-    sim(&build_model(2, 1, 1, name_of(&sim_pebbles_1x1)), 10);
+#[ignore]
+fn dfs_marbles_2x2() {
+    dfs(&build_model(2, 2, 2, name_of(&dfs_marbles_2x2)));
 }
 
 #[test]
-fn sim_pebbles_2x1() {
-    sim(&build_model(2, 2, 1, name_of(&sim_pebbles_2x1)), 20);
+fn sim_marbles_1x1() {
+    sim(&build_model(2, 1, 1, name_of(&sim_marbles_1x1)), 10);
 }
 
 #[test]
-fn sim_pebbles_2x2() {
-    sim(&build_model(2, 2, 2, name_of(&sim_pebbles_2x2)), 40);
+fn sim_marbles_2x1() {
+    sim(&build_model(2, 2, 1, name_of(&sim_marbles_2x1)), 20);
 }
 
 #[test]
-fn sim_pebbles_3x1() {
-    sim(&build_model(2, 3, 1, name_of(&sim_pebbles_3x1)), 40);
+fn sim_marbles_2x2() {
+    sim(&build_model(2, 2, 2, name_of(&sim_marbles_2x2)), 40);
 }
 
 #[test]
-fn sim_pebbles_3x2() {
-    sim(&build_model(2, 3, 2, name_of(&sim_pebbles_3x2)), 80);
+fn sim_marbles_3x1() {
+    sim(&build_model(2, 3, 1, name_of(&sim_marbles_3x1)), 40);
 }
 
 #[test]
-fn sim_pebbles_4x1() {
-    sim(&build_model(2, 4, 1, name_of(&sim_pebbles_4x1)), 80);
+fn sim_marbles_3x2() {
+    sim(&build_model(2, 3, 2, name_of(&sim_marbles_3x2)), 80);
 }
 
 #[test]
-fn sim_pebbles_4x2() {
-    sim(&build_model(2, 4, 2, name_of(&sim_pebbles_4x2)), 160);
+fn sim_marbles_4x1() {
+    sim(&build_model(2, 4, 1, name_of(&sim_marbles_4x1)), 80);
+}
+
+#[test]
+fn sim_marbles_4x2() {
+    sim(&build_model(2, 4, 2, name_of(&sim_marbles_4x2)), 160);
 }
