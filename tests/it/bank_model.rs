@@ -66,9 +66,9 @@ fn build_model<'a>(
             let writeset = readset.clone();
             let cpt_readvers = vec![from_ver, to_ver];
             let cpt_snapshot = cohort.replica.ver;
-            let changes = vec![(from, from_val - xfer_amount), (to, to_val + xfer_amount)];
+            let changes = &[(from, from_val - xfer_amount), (to, to_val + xfer_amount)];
             let (readvers, snapshot) = Record::compress(cpt_readvers, cpt_snapshot);
-            let statemap = Statemap::set(changes);
+            let statemap = Statemap::map(changes, Op::Set);
             cohort.candidates.produce(Rc::new(CandidateMessage {
                 rec: Record {
                     xid: uuidify(cohort_index, run),

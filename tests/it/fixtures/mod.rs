@@ -96,12 +96,13 @@ pub struct Statemap {
 }
 
 impl Statemap {
-    pub fn set(changes: Vec<(usize, i32)>) -> Self {
-        Self::new(changes.into_iter().map(|(item, val)| (item, Op::Set(val))).collect())
-    }
-
     pub fn new(changes: Vec<(usize, Op)>) -> Self {
         Statemap { changes }
+    }
+
+    pub fn map<M>(changes: &[(usize, i32)], mapper: M) -> Self
+        where M: Fn(i32) -> Op {
+        Self::new(changes.iter().map(|(item, val)| (*item, mapper(*val))).collect())
     }
 }
 

@@ -61,7 +61,7 @@ fn build_model<'a>(
                 .map(|&(item, _)| itemset[item].clone())
                 .collect();
             let (readvers, snapshot) = Record::compress(cpt_readvers, cpt_snapshot);
-            let statemap = Statemap::set(changes);
+            let statemap = Statemap::map(&changes, Op::Set);
             cohort.candidates.produce(Rc::new(CandidateMessage {
                 rec: Record {
                     xid: uuidify(cohort_index, run),

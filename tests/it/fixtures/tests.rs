@@ -1,4 +1,4 @@
-use crate::fixtures::{deuuid, uuidify, Broker, Replica, Statemap};
+use crate::fixtures::{deuuid, uuidify, Broker, Replica, Statemap, Op};
 use std::convert::{TryFrom, TryInto};
 use std::fmt::Debug;
 use std::mem::size_of;
@@ -14,17 +14,17 @@ fn replica_install_items() {
     };
 
     // empty statemap at a newer version -- no change expected
-    replica.install_items(&Statemap::set(vec![]), 6);
+    replica.install_items(&Statemap::map(&[], Op::Set), 6);
     assert_eq!(vec![(10, 5), (20, 5), (30, 5)], replica.items);
     assert_eq!(5, replica.ver);
 
     // non-empty statemap at the same version -- no change expected
-    replica.install_items(&Statemap::set(vec![(0, 11)]), 5);
+    replica.install_items(&Statemap::map(&[(0, 11)], Op::Set), 5);
     assert_eq!(vec![(10, 5), (20, 5), (30, 5)], replica.items);
     assert_eq!(5, replica.ver);
 
     // non-empty statemap at a higher version -- expect changes
-    replica.install_items(&Statemap::set(vec![(0, 11)]), 6);
+    replica.install_items(&Statemap::map(&[(0, 11)], Op::Set), 6);
     assert_eq!(vec![(11, 6), (20, 5), (30, 5)], replica.items);
     assert_eq!(5, replica.ver);
 }
@@ -37,20 +37,20 @@ fn replica_install_ooo() {
     };
 
     // non-empty statemap at the same safepoint and same version -- no change expected
-    assert!(!replica.can_install_ooo(&Statemap::set(vec![(0, 11)]), 5, 5));
-    replica.install_ooo(&Statemap::set(vec![(0, 11)]), 5, 5);
+    assert!(!replica.can_install_ooo(&Statemap::map(&[(0, 11)], Op::Set), 5, 5));
+    replica.install_ooo(&Statemap::map(&[(0, 11)], Op::Set), 5, 5);
     assert_eq!(vec![(10, 5), (20, 5), (30, 5)], replica.items);
     assert_eq!(5, replica.ver);
 
     // non-empty statemap at the greater safepoint and greater version -- no change expected
-    assert!(!replica.can_install_ooo(&Statemap::set(vec![(0, 11)]), 6, 6));
-    replica.install_ooo(&Statemap::set(vec![(0, 11)]), 6, 6);
+    assert!(!replica.can_install_ooo(&Statemap::map(&[(0, 11)], Op::Set), 6, 6));
+    replica.install_ooo(&Statemap::map(&[(0, 11)], Op::Set), 6, 6);
     assert_eq!(vec![(10, 5), (20, 5), (30, 5)], replica.items);
     assert_eq!(5, replica.ver);
 
     // non-empty statemap at the same safepoint and greater version -- expect changes
-    assert!(replica.can_install_ooo(&Statemap::set(vec![(0, 11)]), 5, 6));
-    replica.install_ooo(&Statemap::set(vec![(0, 11)]), 5, 6);
+    assert!(replica.can_install_ooo(&Statemap::map(&[(0, 11)], Op::Set), 5, 6));
+    replica.install_ooo(&Statemap::map(&[(0, 11)], Op::Set), 5, 6);
     assert_eq!(vec![(11, 6), (20, 5), (30, 5)], replica.items);
     assert_eq!(5, replica.ver);
 }
@@ -63,12 +63,12 @@ fn replica_install_ser() {
     };
 
     // non-empty statemap at the same version -- no change expected
-    replica.install_ser(&Statemap::set(vec![(0, 11)]), 5);
+    replica.install_ser(&Statemap::map(&[(0, 11)], Op::Set), 5);
     assert_eq!(vec![(10, 5), (20, 5), (30, 5)], replica.items);
     assert_eq!(5, replica.ver);
 
     // non-empty statemap at a higher version -- expect changes
-    replica.install_ser(&Statemap::set(vec![(0, 11)]), 6);
+    replica.install_ser(&Statemap::map(&[(0, 11)], Op::Set), 6);
     assert_eq!(vec![(11, 6), (20, 5), (30, 5)], replica.items);
     assert_eq!(6, replica.ver);
 }
