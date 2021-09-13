@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use stride::*;
 use stride::havoc::model::{Model, name_of};
-use stride::havoc::model::ActionResult::{Blocked, Joined, Ran};
+use stride::havoc::model::ActionResult::{Joined, Ran};
 use stride::havoc::model::Retention::{Strong, Weak};
 
 use super::fixtures::*;
@@ -32,7 +32,6 @@ fn build_model<'a>(
     name: &str,
 ) -> Model<'a, SystemState> {
     let num_cohorts = combos.len();
-    let expect_txns = num_cohorts * txns_per_cohort;
     let mut model = Model::new(move || SystemState::new(num_cohorts, values)).with_name(name.into());
 
     for (cohort_index, &(p, q)) in combos.iter().enumerate() {
@@ -65,46 +64,8 @@ fn build_model<'a>(
         model.add_action(format!("updater-{}", cohort_index), Weak, updater_action(cohort_index, asserter(values, cohort_index)));
         model.add_action(format!("replicator-{}", cohort_index), Weak, replicator_action(cohort_index, asserter(values, cohort_index)));
     }
-
-    model.add_action("certifier".into(), Weak, |s, _| {
-        let certifier = &mut s.certifier;
-        match certifier.candidates.consume() {
-            None => Blocked,
-            Some((offset, candidate_message)) => {
-                let candidate = Candidate {
-                    rec: candidate_message.rec.clone(),
-                    ver: offset as u64,
-                };
-                let outcome = certifier.examiner.assess(&candidate);
-                let decision_message = match outcome {
-                    Outcome::Commit(safepoint, _) => DecisionMessage::Commit(CommitMessage {
-                        candidate,
-                        safepoint,
-                        statemap: candidate_message.statemap.clone(),
-                    }),
-                    Outcome::Abort(reason, _) => {
-                        DecisionMessage::Abort(AbortMessage { candidate, reason })
-                    }
-                };
-                certifier.decisions.produce(Rc::new(decision_message));
-                Ran
-            }
-        }
-    });
-
-    model.add_action("supervisor".into(), Strong, move |s, _| {
-        let finished_cohorts = s
-            .cohorts
-            .iter()
-            .filter(|&cohort| cohort.decisions.offset() == expect_txns + 1)
-            .count();
-        if finished_cohorts == num_cohorts {
-            Joined
-        } else {
-            Blocked
-        }
-    });
-
+    model.add_action("certifier".into(), Weak, certifier_action());
+    model.add_action("supervisor".into(), Strong, supervisor_action(num_cohorts * txns_per_cohort));
     model
 }
 

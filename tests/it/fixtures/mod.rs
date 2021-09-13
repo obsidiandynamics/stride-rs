@@ -16,8 +16,8 @@ use stride::havoc::model::{rand_element, ActionResult, Context, Model};
 use stride::havoc::sim::{Sim, SimResult};
 use stride::havoc::{checker, sim, Sublevel};
 use stride::{
-    AbortMessage, Candidate, CandidateMessage, CommitMessage, DecisionMessage, Examiner, Outcome,
-};
+    AbortMessage, Candidate, CandidateMessage, CommitMessage, DecisionMessage};
+use stride::examiner::{Examiner, Outcome};
 
 #[derive(Debug)]
 pub struct SystemState {

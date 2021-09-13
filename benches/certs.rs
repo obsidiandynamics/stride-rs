@@ -1,8 +1,9 @@
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 use uuid::Uuid;
 
-use stride::Outcome::Commit;
-use stride::{Candidate, Discord, Examiner, Record};
+use stride::{Candidate, Record};
+use stride::examiner::{Examiner, Discord};
+use stride::examiner::Outcome::Commit;
 
 fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function("learn read 1/write 1", |b| {
