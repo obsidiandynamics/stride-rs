@@ -1,14 +1,14 @@
+use std::collections::hash_map::Entry;
 use std::rc::Rc;
 
 use rustc_hash::FxHashMap;
 
 use stride::*;
 use stride::havoc::model::{Model, name_of};
-use stride::havoc::model::ActionResult::{Blocked, Joined, Ran};
+use stride::havoc::model::ActionResult::{Joined, Ran};
 use stride::havoc::model::Retention::{Strong, Weak};
 
 use super::fixtures::*;
-use std::collections::hash_map::Entry;
 
 fn asserter() -> impl Fn(&[Cohort]) -> Box<dyn Fn(&[Cohort]) -> Option<String>> {
     move |_| {
