@@ -8,21 +8,37 @@ use stride::*;
 
 fn asserter(cohort_index: usize) -> impl Fn(&[Cohort]) -> Box<dyn Fn(&[Cohort]) -> Option<String>> {
     move |before| {
-        let &(before_val, _) = &before[cohort_index].replica.items[0];
+        let &(before_counter_val, _) = &before[cohort_index].replica.items[0];
+        let &(before_shadow_val, _) = &before[cohort_index].replica.items[1];
         Box::new(move |after| {
             let replica = &after[cohort_index].replica;
-            let &(after_val, _) = &replica.items[0];
-            if after_val < before_val {
+            let &(after_counter_val, _) = &replica.items[0];
+            if after_counter_val < before_counter_val {
+                // the counter is monotonic; i.e., counter' >= counter
                 Some(format!(
-                    "after_val ({}) < before_val ({}) for {:?}",
-                    after_val, before_val, replica
+                    "after_counter_val ({}) < before_counter_val ({}) for {:?}",
+                    after_counter_val, before_counter_val, replica
                 ))
             } else {
-                let &(shadow_val, _) = &replica.items[1];
-                if after_val < shadow_val {
+                let &(after_shadow_val, _) = &replica.items[1];
+                if after_shadow_val < before_shadow_val {
+                    // the shadow is also monotonic; i.e., shadow' >= shadow
                     Some(format!(
-                        "after_val ({}) < shadow_val ({}) for {:?}",
-                        after_val, shadow_val, replica
+                        "after_shadow_val ({}) < before_shadow_val ({}) for {:?}",
+                        after_shadow_val, before_shadow_val, replica
+                    ))
+                } else if after_counter_val < after_shadow_val {
+                    // the shadow trails the counter; i.e., counter' >= shadow'
+                    Some(format!(
+                        "after_counter_val ({}) < after_shadow_val ({}) for {:?}",
+                        after_counter_val, after_shadow_val, replica
+                    ))
+                } else if before_shadow_val != after_shadow_val && before_counter_val != after_shadow_val {
+                    // whenever the shadow is reassigned, it must mimic the counter;
+                    // i.e., (shadow /= shadow') => counter = shadow'
+                    Some(format!(
+                        "after_counter_val ({}) != after_shadow_val ({}) for {:?}",
+                        after_counter_val, after_shadow_val, replica
                     ))
                 } else {
                     None
