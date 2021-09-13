@@ -73,13 +73,34 @@ impl CohortState for SystemState {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum Op {
+    Set(i32),
+    Add(i32),
+    Mpy(i32)
+}
+
+impl Op {
+    fn eval(&self, existing: i32) -> i32 {
+        match self {
+            Op::Set(new) => *new,
+            Op::Add(addend) => existing + *addend,
+            Op::Mpy(multiplicand) => existing * *multiplicand
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Statemap {
-    pub changes: Vec<(usize, i32)>,
+    pub changes: Vec<(usize, Op)>,
 }
 
 impl Statemap {
-    pub fn new(changes: Vec<(usize, i32)>) -> Self {
+    pub fn set(changes: Vec<(usize, i32)>) -> Self {
+        Self::new(changes.into_iter().map(|(item, val)| (item, Op::Set(val))).collect())
+    }
+
+    pub fn new(changes: Vec<(usize, Op)>) -> Self {
         Statemap { changes }
     }
 }
@@ -125,10 +146,10 @@ impl Replica {
     }
 
     fn install_items(&mut self, statemap: &Statemap, ver: u64) {
-        for &(change_item, change_value) in &statemap.changes {
-            let existing = &mut self.items[change_item];
+        for (change_item, change_value) in &statemap.changes {
+            let existing = &mut self.items[*change_item];
             if ver > existing.1 {
-                *existing = (change_value, ver);
+                *existing = (change_value.eval(existing.0), ver);
             }
         }
     }

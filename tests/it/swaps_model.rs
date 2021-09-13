@@ -44,7 +44,7 @@ fn build_model<'a>(
                 (cohort.replica.items[p], cohort.replica.items[q]);
             let cpt_readvers = vec![old_p_ver, old_q_ver];
             let cpt_snapshot = cohort.replica.ver;
-            let statemap = Statemap::new(vec![(p, old_q_val), (q, old_p_val)]);
+            let statemap = Statemap::set(vec![(p, old_q_val), (q, old_p_val)]);
             let (readvers, snapshot) = Record::compress(cpt_readvers, cpt_snapshot);
             cohort.candidates.produce(Rc::new(CandidateMessage {
                 rec: Record {

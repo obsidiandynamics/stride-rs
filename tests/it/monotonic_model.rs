@@ -72,7 +72,7 @@ fn build_model<'a>(
             let cpt_snapshot = cohort.replica.ver;
             let changes = vec![(0, item_val + 1)];
             let (readvers, snapshot) = Record::compress(cpt_readvers, cpt_snapshot);
-            let statemap = Statemap::new(changes);
+            let statemap = Statemap::set(changes);
             cohort.candidates.produce(Rc::new(CandidateMessage {
                 rec: Record {
                     xid: uuidify(cohort_index, run),
@@ -103,7 +103,7 @@ fn build_model<'a>(
             let cpt_snapshot = cohort.replica.ver;
             let changes = vec![(1, source_item_val)];
             let (readvers, snapshot) = Record::compress(cpt_readvers, cpt_snapshot);
-            let statemap = Statemap::new(changes);
+            let statemap = Statemap::set(changes);
             cohort.candidates.produce(Rc::new(CandidateMessage {
                 rec: Record {
                     xid: uuidify(cohort_index, run),
