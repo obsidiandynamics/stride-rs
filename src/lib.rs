@@ -2,8 +2,8 @@ use uuid::Uuid;
 
 pub mod examiner;
 pub mod havoc;
+pub mod suffix;
 
-//TODO this doesn't need to be part of the examiner
 #[derive(Debug)]
 pub enum Message<S: Clone> {
     Candidate(CandidateMessage<S>),

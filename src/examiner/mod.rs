@@ -73,7 +73,6 @@ impl Examiner {
         // if (true) {
         //     return Commit(0, Assertive)
         // }//TODO
-
         let mut safepoint = self.base - 1;
 
         // rule R1: commit write-only transactions

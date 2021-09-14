@@ -22,25 +22,6 @@ pub enum Retention {
     Weak,
 }
 
-// pub struct LazyTrace {
-//     cell: RefCell<Option<Trace>>
-// }
-//
-// impl LazyTrace {
-//     pub fn new() -> Self {
-//         LazyTrace { cell: RefCell::new(None) }
-//     }
-//
-//     pub fn borrow<'a>(&'a self) -> impl Deref<Target = Trace> + 'a {
-//         // let x = self.cell.borrow();
-//         // x
-//         Ref::
-//         let x = self.cell.borrow();
-//         Ref::map(x, |x| x.as_ref().unwrap())
-//         // Ref::map(x, |x| &x.unwrap())
-//     }
-// }
-
 pub fn rand_element<'a, T>(c: &mut dyn Context, slice: &'a [T]) -> &'a T {
     let rand = c.rand(slice.len() as u64);
     &slice[rand as usize]
@@ -162,11 +143,11 @@ impl<S> Display for PrettyTrace<'_, S> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         for (stack_index, call) in self.trace.calls.iter().enumerate() {
             let action_entry = self.model.actions.get(call.action).ok_or(fmt::Error)?;
-            write!(f, "{: >3}: {}\n", stack_index, &action_entry.name)?;
+            writeln!(f, "{: >3}: {}", stack_index, &action_entry.name)?;
             if call.rands.is_empty() {
-                write!(f, "      -\n")?;
+                writeln!(f, "      -")?;
             } else {
-                write!(f, "      rands: {:?}\n", call.rands)?;
+                writeln!(f, "      rands: {:?}", call.rands)?;
             }
         }
         Ok(())

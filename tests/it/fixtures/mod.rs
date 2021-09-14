@@ -102,7 +102,7 @@ impl Statemap {
 
     pub fn map<M>(changes: &[(usize, i32)], mapper: M) -> Self
         where M: Fn(i32) -> Op {
-        Self::new(changes.iter().map(|(item, val)| (*item, mapper(*val))).collect())
+        Self::new(changes.iter().map(|&(item, val)| (item, mapper(val))).collect())
     }
 }
 
@@ -413,7 +413,7 @@ pub fn sim<S>(model: &Model<S>, max_schedules: usize) {
     } else if let SimResult::Deadlock(deadlock) = &result {
         log::error!("deadlock trace:\n{}", deadlock.trace.prettify(&model));
     }
-    assert_eq!(SimResult::Pass, result, "{:?}", result);
+    assert_eq!(SimResult::Pass, result, "{:?} (seed: {})", result, seed);
 }
 
 pub trait CohortState {
