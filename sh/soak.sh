@@ -4,9 +4,11 @@ if [ "$SOAK_CMD" == "" ]; then
   echo "SOAK_CMD is not set"
   exit 1
 fi
+
 if [ "$SOAK_RUNS" == "" ]; then
   SOAK_RUNS=1
 fi
+
 if [ "$SOAK_INTERVAL" == "" ]; then
   SOAK_INTERVAL=0
 fi
@@ -25,7 +27,7 @@ echo -e "${GREY}SOAK_RUNS:     $SOAK_RUNS${NC}"
 echo -e "${GREY}SOAK_INTERVAL: $SOAK_INTERVAL${NC}"
 echo -e "${GREY}SOAK_GITPULL:  $SOAK_GITPULL${NC}"
 
-cd "$(dirname $0)"/..
+cd "$(dirname "$0")"/..
 
 set -e
 cycle=1
