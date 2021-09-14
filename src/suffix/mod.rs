@@ -1,7 +1,7 @@
 use crate::suffix::InsertError::Nonmonotonic;
 use std::ops::Range;
-use std::iter::Zip;
-use std::slice::Iter;
+use crate::suffix::DecideResult::{Lapsed, Uninitialized, Decided};
+use crate::suffix::DecideError::NoSuchCandidate;
 
 #[derive(Debug, PartialEq)]
 pub struct SuffixEntry {
@@ -13,7 +13,8 @@ pub struct SuffixEntry {
 #[derive(Debug)]
 pub struct Suffix {
     base: u64,
-    items: Vec<Option<SuffixEntry>>
+    items: Vec<Option<SuffixEntry>>,
+    highest_decided: u64
 }
 
 impl Default for Suffix {
@@ -27,9 +28,21 @@ pub enum InsertError {
     Nonmonotonic
 }
 
+#[derive(Debug, PartialEq)]
+pub enum DecideResult {
+    Uninitialized,
+    Lapsed(u64),          // the low-water mark
+    Decided(u64)          // the highest decided version in the suffix
+}
+
+#[derive(Debug, PartialEq)]
+pub enum DecideError {
+    NoSuchCandidate
+}
+
 impl Suffix {
     pub fn new(capacity: usize) -> Self {
-        Self { base: 0, items: Vec::with_capacity(capacity) }
+        Self { base: 0, items: Vec::with_capacity(capacity), highest_decided: 0 }
     }
 
     pub fn lwm(&self) -> Option<u64> {
@@ -55,7 +68,7 @@ impl Suffix {
             if ver == 0 {
                 return Err(Nonmonotonic);
             }
-            // initialize the base offset on the first appended entry
+            // initialize the base offset on the first inserted entry
             self.base = ver;
         }
 
@@ -79,7 +92,7 @@ impl Suffix {
     }
 
     pub fn get(&self, ver: u64) -> Option<&SuffixEntry> {
-        if self.base == 0 || ver < self.base as u64 {
+        if self.base == 0 || ver < self.base {
             return None;
         }
 
@@ -92,6 +105,42 @@ impl Suffix {
             None => None,
             Some(entry) => Some(entry)
         }
+    }
+
+    pub fn decide(&mut self, ver: u64) -> Result<DecideResult, DecideError> {
+        if self.base == 0 {
+            return Ok(Uninitialized);
+        }
+        if ver < self.base {
+            return Ok(Lapsed(self.base));
+        }
+
+        let index = (ver - self.base) as usize;
+        if index >= self.items.len() {
+            return Err(NoSuchCandidate)
+        }
+
+        match &mut self.items[index] {
+            None => return Err(NoSuchCandidate),
+            Some(item) => item.decided = true
+        }
+
+        if ver == self.highest_decided {
+            for i in (index + 1)..self.items.len() {
+                match &mut self.items[i] {
+                    None => self.highest_decided += 1,
+                    Some(item) => {
+                        if item.decided {
+                            self.highest_decided += 1;
+                        } else {
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(Decided(self.highest_decided))
     }
 }
 
