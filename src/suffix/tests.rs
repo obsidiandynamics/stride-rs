@@ -152,11 +152,11 @@ fn decide_uninitialized() {
 fn decide_sparse_forward() {
     let mut suffix = Suffix::default();
     assert_eq!(Ok(()), suffix.insert(vec!["r3".into()], vec![], 3));
-    assert_eq!(Some(2), suffix.highest_decided());
     assert_eq!(Ok(()), suffix.insert(vec!["r4".into()], vec![], 4));
     assert_eq!(Ok(()), suffix.insert(vec!["r7".into()], vec![], 7));
     assert_eq!(Ok(()), suffix.insert(vec!["r8".into()], vec![], 8));
     assert_eq!(Some(2), suffix.highest_decided());
+
     assert_eq!(Ok(Lapsed(3)), suffix.decide(2));
     assert_eq!(Ok(Decided(3)), suffix.decide(3));
     assert_eq!(Ok(Decided(3)), suffix.decide(3)); // decide is idempotent
@@ -169,6 +169,29 @@ fn decide_sparse_forward() {
     assert_eq!(Err(NoSuchCandidate), suffix.decide(6));
     assert_eq!(Ok(Decided(7)), suffix.decide(7));
     assert_eq!(Some(7), suffix.highest_decided());
+    assert_eq!(Ok(Decided(8)), suffix.decide(8));
+    assert_eq!(Some(8), suffix.highest_decided());
+}
+
+#[test]
+fn decide_sparse_out_of_order() {
+    let mut suffix = Suffix::default();
+    assert_eq!(Ok(()), suffix.insert(vec!["r3".into()], vec![], 3));
+    assert_eq!(Ok(()), suffix.insert(vec!["r4".into()], vec![], 4));
+    assert_eq!(Ok(()), suffix.insert(vec!["r7".into()], vec![], 7));
+    assert_eq!(Ok(()), suffix.insert(vec!["r8".into()], vec![], 8));
+    assert_eq!(Some(2), suffix.highest_decided());
+
+    assert_eq!(Ok(Decided(2)), suffix.decide(7));
+    assert_eq!(Some(2), suffix.highest_decided());
+
+    assert_eq!(Ok(Decided(3)), suffix.decide(3));
+    assert_eq!(Some(3), suffix.highest_decided());
+    assert_eq!(Ok(Decided(3)), suffix.decide(3)); // decide is idempotent
+
+    assert_eq!(Ok(Decided(7)), suffix.decide(4));
+    assert_eq!(Some(7), suffix.highest_decided());
+
     assert_eq!(Ok(Decided(8)), suffix.decide(8));
     assert_eq!(Some(8), suffix.highest_decided());
 }
