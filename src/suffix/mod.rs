@@ -182,24 +182,12 @@ impl Suffix {
             }
         }
 
-        let mut remaining = Vec::with_capacity(self.items.len() - num_to_truncate);
-        for entry_index in num_to_truncate..self.items.len() {
-            let item = &mut self.items[entry_index];
-            match item.take() {
-                None => remaining.push(None),
-                Some(entry) => {
-                    remaining.push(Some(RetainedEntry {
-                        readset: entry.readset,
-                        writeset: entry.writeset,
-                        decided: entry.decided
-                    }));
-                }
-            }
+        let num_remaining = self.items.len() - num_to_truncate;
+        for entry_index in 0..num_remaining {
+            self.items[entry_index] = self.items[entry_index + num_to_truncate].take();
         }
-
-        self.items = remaining;
+        self.items.truncate(num_remaining);
         self.base += num_to_truncate as u64;
-
         Some(truncated)
     }
 }
