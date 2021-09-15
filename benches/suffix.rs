@@ -14,7 +14,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     });
 
     c.bench_function("suffix_insert_decide", |b| {
-        let (min_extent, max_extent) = (1_000_000, 2_000_000);
+        let (min_extent, max_extent) = (100_000, 200_000);
         let mut suffix = Suffix::new(max_extent);
         let mut ver = 1;
         b.iter(|| {

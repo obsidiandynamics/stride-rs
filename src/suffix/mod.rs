@@ -20,7 +20,7 @@ pub struct TruncatedEntry {
 #[derive(Debug)]
 pub struct Suffix {
     base: u64,
-    items: Vec<Option<RetainedEntry>>,
+    entries: Vec<Option<RetainedEntry>>,
     highest_decided: u64
 }
 
@@ -49,7 +49,7 @@ pub enum DecideError {
 
 impl Suffix {
     pub fn new(capacity: usize) -> Self {
-        Self { base: 0, items: Vec::with_capacity(capacity), highest_decided: 0 }
+        Self { base: 0, entries: Vec::with_capacity(capacity), highest_decided: 0 }
     }
 
     pub fn lwm(&self) -> Option<u64> {
@@ -62,12 +62,12 @@ impl Suffix {
     pub fn hwm(&self) -> Option<u64> {
         match self.base {
             0 => None,
-            base => Some(base + self.items.len() as u64)
+            base => Some(base + self.entries.len() as u64)
         }
     }
 
     pub fn range(&self) -> Range<u64> {
-        Range { start: self.base, end: self.base + self.items.len() as u64 }
+        Range { start: self.base, end: self.base + self.entries.len() as u64 }
     }
 
     pub fn insert(&mut self, readset: Vec<String>, writeset: Vec<String>, ver: u64) -> Result<(), InsertError> {
@@ -78,17 +78,17 @@ impl Suffix {
             self.highest_decided = ver - 1;
         }
 
-        let hwm = self.base + self.items.len() as u64;
+        let hwm = self.base + self.entries.len() as u64;
         if ver < hwm {
             return Err(Nonmonotonic);
         }
 
         let pad = (ver - hwm) as usize;
-        self.items.reserve(pad + 1);
+        self.entries.reserve(pad + 1);
         for _ in (0..pad).into_iter() {
-            self.items.push(None)
+            self.entries.push(None)
         }
-        self.items.push(Some(RetainedEntry {
+        self.entries.push(Some(RetainedEntry {
             readset,
             writeset,
             decided: false
@@ -102,12 +102,12 @@ impl Suffix {
             return None;
         }
 
-        let hwm = self.base + self.items.len() as u64;
+        let hwm = self.base + self.entries.len() as u64;
         if ver >= hwm {
             return None;
         }
 
-        return match &self.items[(ver - self.base) as usize] {
+        return match &self.entries[(ver - self.base) as usize] {
             None => None,
             Some(entry) => Some(entry)
         }
@@ -122,19 +122,19 @@ impl Suffix {
         }
 
         let index = (ver - self.base) as usize;
-        if index >= self.items.len() {
+        if index >= self.entries.len() {
             return Err(NoSuchCandidate)
         }
 
-        match &mut self.items[index] {
+        match &mut self.entries[index] {
             None => return Err(NoSuchCandidate),
             Some(item) => item.decided = true
         }
 
         if ver == self.highest_decided + 1 {
             self.highest_decided = ver;
-            for i in (index + 1)..self.items.len() {
-                match &mut self.items[i] {
+            for i in (index + 1)..self.entries.len() {
+                match &mut self.entries[i] {
                     None => self.highest_decided += 1,
                     Some(item) => {
                         if item.decided {
@@ -167,10 +167,10 @@ impl Suffix {
         }
 
         let num_to_truncate = extent - min_extent;
+        let drained = self.entries.drain(..num_to_truncate);
         let mut truncated = Vec::with_capacity(num_to_truncate);
-        for entry_index in 0..num_to_truncate {
-            let item = &mut self.items[entry_index];
-            match item.take() {
+        for (entry_index, mut entry) in drained.enumerate() {
+            match entry.take() {
                 None => {}
                 Some(entry) => {
                     truncated.push(TruncatedEntry {
@@ -182,11 +182,6 @@ impl Suffix {
             }
         }
 
-        let num_remaining = self.items.len() - num_to_truncate;
-        for entry_index in 0..num_remaining {
-            self.items[entry_index] = self.items[entry_index + num_to_truncate].take();
-        }
-        self.items.truncate(num_remaining);
         self.base += num_to_truncate as u64;
         Some(truncated)
     }

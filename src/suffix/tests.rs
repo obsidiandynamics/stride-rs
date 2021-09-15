@@ -5,7 +5,7 @@ use crate::suffix::DecideError::NoSuchCandidate;
 
 impl Suffix {
     fn enumerate(&self) -> impl Iterator<Item = (u64, &Option<RetainedEntry>)> {
-        self.range().into_iter().zip(self.items.iter())
+        self.range().into_iter().zip(self.entries.iter())
     }
 
     // fn _insert(&mut self, readset: &[&str], writeset: &[&str], ver: u64) -> Result<(), InsertError> {
