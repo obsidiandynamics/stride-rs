@@ -34,6 +34,7 @@ impl Examiner {
     }
 
     pub fn learn(&mut self, candidate: &Candidate) {
+        assert_ne!(0, candidate.ver, "unsupported version 0");
         for read in candidate.rec.readset.iter() {
             self.reads.insert(read.clone(), candidate.ver);
         }
@@ -70,6 +71,8 @@ impl Examiner {
     }
 
     pub fn assess(&mut self, candidate: &Candidate) -> Outcome {
+        assert_ne!(0, candidate.ver, "unsupported version 0");
+
         // if (true) {
         //     return Commit(0, Assertive)
         // }//TODO

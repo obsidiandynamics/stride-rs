@@ -24,6 +24,34 @@ fn learn_forget() {
     //TODO test forget()
 }
 
+#[test] #[should_panic(expected = "unsupported version 0")]
+fn learn_ver_0() {
+    Examiner::new().learn(&Candidate {
+        rec: Record {
+            xid: Uuid::default(),
+            readset: vec![],
+            writeset: vec![],
+            readvers: vec![],
+            snapshot: 0,
+        },
+        ver: 0,
+    });
+}
+
+#[test] #[should_panic(expected = "unsupported version 0")]
+fn assess_ver_0() {
+    Examiner::new().assess(&Candidate {
+        rec: Record {
+            xid: Uuid::default(),
+            readset: vec![],
+            writeset: vec![],
+            readvers: vec![],
+            snapshot: 0,
+        },
+        ver: 0,
+    });
+}
+
 #[test]
 fn paper_example_1() {
     let mut examiner = Examiner::new();
