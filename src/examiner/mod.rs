@@ -63,7 +63,7 @@ impl Examiner {
             }
 
             // update safepoint for write-write intersection and learn the write
-            match self.writes.entry(candidate_write.clone()) {
+            match self.writes.entry(candidate_write) {
                 Entry::Occupied(mut entry) => {
                     let self_write = entry.insert(ver);
                     if self_write > safepoint {
