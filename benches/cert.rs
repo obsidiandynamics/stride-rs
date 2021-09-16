@@ -39,7 +39,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             assert_eq!(Ok(()), result);
             assert_eq!(Some(ver + 1), suffix.hwm());
 
-            let outcome = examiner.assess(black_box(&Candidate {
+            let outcome = examiner.assess(black_box(Candidate {
                 rec: Record {
                     xid: Uuid::from_u128(ver as u128),
                     readset: readset.clone(),
@@ -80,7 +80,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             assert_eq!(Ok(()), result);
             assert_eq!(Some(ver + 1), suffix.hwm());
 
-            examiner.learn(black_box(&Candidate {
+            examiner.learn(black_box(Candidate {
                 rec: Record {
                     xid: Uuid::from_u128(ver as u128),
                     readset: readset.clone(),

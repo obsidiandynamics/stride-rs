@@ -40,23 +40,23 @@ impl Examiner {
         }
     }
 
-    pub fn learn(&mut self, candidate: &Candidate) {
+    pub fn learn(&mut self, candidate: Candidate) {
         assert_ne!(0, candidate.ver, "unsupported version 0");
         self.ensure_initialized(candidate.ver);
-        for read in candidate.rec.readset.iter() {
-            self.reads.insert(read.clone(), candidate.ver);
+        for read in candidate.rec.readset {
+            self.reads.insert(read, candidate.ver);
         }
 
-        for write in candidate.rec.writeset.iter() {
-            self.writes.insert(write.clone(), candidate.ver);
+        for write in candidate.rec.writeset {
+            self.writes.insert(write, candidate.ver);
         }
     }
 
-    fn update_writes_and_compute_safepoint(&mut self, candidate: &Candidate) -> u64 {
+    fn update_writes_and_compute_safepoint(&mut self, writeset: Vec<String>, ver: u64) -> u64 {
         let mut safepoint = 0;
-        for candidate_write in candidate.rec.writeset.iter() {
+        for candidate_write in writeset {
             // update safepoint for read-write intersection
-            if let Some(&self_read) = self.reads.get(candidate_write) {
+            if let Some(&self_read) = self.reads.get(&candidate_write) {
                 if self_read > safepoint {
                     safepoint = self_read;
                 }
@@ -65,20 +65,20 @@ impl Examiner {
             // update safepoint for write-write intersection and learn the write
             match self.writes.entry(candidate_write.clone()) {
                 Entry::Occupied(mut entry) => {
-                    let self_write = entry.insert(candidate.ver);
+                    let self_write = entry.insert(ver);
                     if self_write > safepoint {
                         safepoint = self_write
                     }
                 }
                 Entry::Vacant(entry) => {
-                    entry.insert(candidate.ver);
+                    entry.insert(ver);
                 }
             }
         }
         safepoint
     }
 
-    pub fn assess(&mut self, candidate: &Candidate) -> Outcome {
+    pub fn assess(&mut self, candidate: Candidate) -> Outcome {
         assert_ne!(0, candidate.ver, "unsupported version 0");
         self.ensure_initialized(candidate.ver);
         let mut safepoint = self.base - 1;
@@ -86,7 +86,7 @@ impl Examiner {
         // rule R1: commit write-only transactions
         if candidate.rec.readset.is_empty() {
             // update safepoint for read-write and write-write intersection, and learn the writes
-            let tmp_safepoint = self.update_writes_and_compute_safepoint(&candidate);
+            let tmp_safepoint = self.update_writes_and_compute_safepoint(candidate.rec.writeset, candidate.ver);
             if tmp_safepoint > safepoint {
                 safepoint = tmp_safepoint;
             }
@@ -119,14 +119,14 @@ impl Examiner {
         // rule R4 conditionally commit
 
         // update safepoint for read-write and write-write intersection, and learn the writes
-        let tmp_safepoint = self.update_writes_and_compute_safepoint(&candidate);
+        let tmp_safepoint = self.update_writes_and_compute_safepoint(candidate.rec.writeset, candidate.ver);
         if tmp_safepoint > safepoint {
             safepoint = tmp_safepoint;
         }
 
         // learn the reads
-        for candidate_read in candidate.rec.readset.iter() {
-            self.reads.insert(candidate_read.clone(), candidate.ver);
+        for candidate_read in candidate.rec.readset {
+            self.reads.insert(candidate_read, candidate.ver);
         }
 
         Commit(safepoint, Permissive)

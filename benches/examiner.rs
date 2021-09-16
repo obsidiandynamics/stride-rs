@@ -19,7 +19,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             ver: 1,
         };
         b.iter(|| {
-            examiner.learn(black_box(&candidate));
+            examiner.learn(black_box(candidate.clone()));
             candidate.rec.snapshot += 1;
             candidate.ver += 1;
         });
@@ -38,7 +38,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             ver: 1,
         };
         b.iter(|| {
-            let outcome = examiner.assess(black_box(&candidate));
+            let outcome = examiner.assess(black_box(candidate.clone()));
             assert_eq!(Commit(candidate.rec.snapshot, Discord::Permissive), outcome);
             candidate.rec.snapshot += 1;
             candidate.ver += 1;

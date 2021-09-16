@@ -50,7 +50,7 @@ fn learn_discard() {
     };
     assert!(!examiner.knows(&candidate));
 
-    examiner.learn(&candidate);
+    examiner.learn(candidate.clone());
     assert_eq!(Some(5), examiner.base());
     assert_knows(&examiner, &candidate);
 
@@ -72,7 +72,7 @@ fn learn_discard_two_with_identical_items() {
         },
         ver: 1,
     };
-    examiner.learn(&c1);
+    examiner.learn(c1.clone());
     let c2 = Candidate {
         rec: Record {
             xid: Uuid::from_u128(2),
@@ -83,7 +83,7 @@ fn learn_discard_two_with_identical_items() {
         },
         ver: 2,
     };
-    examiner.learn(&c2);
+    examiner.learn(c2.clone());
     assert_eq!(Some(1), examiner.base());
     assert_knows(&examiner, &c1);
     assert_knows(&examiner, &c2);
@@ -114,7 +114,7 @@ fn learn_discard_two_with_nonidentical_items() {
         },
         ver: 1,
     };
-    examiner.learn(&c1);
+    examiner.learn(c1.clone());
     let c2 = Candidate {
         rec: Record {
             xid: Uuid::from_u128(2),
@@ -125,7 +125,7 @@ fn learn_discard_two_with_nonidentical_items() {
         },
         ver: 2,
     };
-    examiner.learn(&c2);
+    examiner.learn(c2.clone());
     assert_eq!(Some(1), examiner.base());
     assert_knows(&examiner, &c1);
     assert_knows(&examiner, &c2);
@@ -153,7 +153,7 @@ fn discard_uninitialized() {
 #[test] #[should_panic(expected = "entry.ver (1) < self.base (2)")]
 fn discard_nonmonotonic() {
     let mut examiner = Examiner::new();
-    examiner.learn(&Candidate {
+    examiner.learn(Candidate {
         rec: Record {
             xid: Uuid::nil(),
             readset: vec![],
@@ -172,7 +172,7 @@ fn discard_nonmonotonic() {
 
 #[test] #[should_panic(expected = "unsupported version 0")]
 fn learn_ver_0() {
-    Examiner::new().learn(&Candidate {
+    Examiner::new().learn(Candidate {
         rec: Record {
             xid: Uuid::default(),
             readset: vec![],
@@ -186,7 +186,7 @@ fn learn_ver_0() {
 
 #[test] #[should_panic(expected = "unsupported version 0")]
 fn assess_ver_0() {
-    Examiner::new().assess(&Candidate {
+    Examiner::new().assess(Candidate {
         rec: Record {
             xid: Uuid::default(),
             readset: vec![],
@@ -202,7 +202,7 @@ fn assess_ver_0() {
 fn paper_example_1() {
     let mut examiner = Examiner::new();
     examiner.base = 4;
-    examiner.learn(&Candidate {
+    examiner.learn(Candidate {
         rec: Record {
             xid: Uuid::from_u128(1),
             readset: vec!["x".into(), "y".into()],
@@ -212,7 +212,7 @@ fn paper_example_1() {
         },
         ver: 4,
     });
-    examiner.learn(&Candidate {
+    examiner.learn(Candidate {
         rec: Record {
             xid: Uuid::from_u128(2),
             readset: vec!["x".into(), "y".into()],
@@ -233,7 +233,7 @@ fn paper_example_1() {
         ver: 6,
     };
     assert!(!examiner.knows(&candidate));
-    let outcome = examiner.assess(&candidate);
+    let outcome = examiner.assess(candidate.clone());
     assert_eq!(Commit(5, Assertive), outcome);
     assert_knows(&examiner, &candidate)
 }
@@ -242,7 +242,7 @@ fn paper_example_1() {
 fn paper_example_2() {
     let mut examiner = Examiner::new();
     examiner.base = 12;
-    examiner.learn(&Candidate {
+    examiner.learn(Candidate {
         rec: Record {
             xid: Uuid::from_u128(1),
             readset: vec!["x".into(), "y".into()],
@@ -252,7 +252,7 @@ fn paper_example_2() {
         },
         ver: 12,
     });
-    examiner.learn(&Candidate {
+    examiner.learn(Candidate {
         rec: Record {
             xid: Uuid::from_u128(2),
             readset: vec!["x".into(), "y".into()],
@@ -262,7 +262,7 @@ fn paper_example_2() {
         },
         ver: 13,
     });
-    examiner.learn(&Candidate {
+    examiner.learn(Candidate {
         rec: Record {
             xid: Uuid::from_u128(3),
             readset: vec![],
@@ -283,7 +283,7 @@ fn paper_example_2() {
         ver: 15,
     };
     assert!(!examiner.knows(&candidate));
-    let outcome = examiner.assess(&candidate);
+    let outcome = examiner.assess(candidate.clone());
     assert_eq!(Abort(Staleness, Permissive), outcome);
     assert_knows(&examiner, &candidate)
 }
@@ -292,7 +292,7 @@ fn paper_example_2() {
 fn paper_example_3() {
     let mut examiner = Examiner::new();
     examiner.base = 24;
-    examiner.learn(&Candidate {
+    examiner.learn(Candidate {
         rec: Record {
             xid: Uuid::from_u128(1),
             readset: vec!["x".into(), "y".into()],
@@ -302,7 +302,7 @@ fn paper_example_3() {
         },
         ver: 24,
     });
-    examiner.learn(&Candidate {
+    examiner.learn(Candidate {
         rec: Record {
             xid: Uuid::from_u128(2),
             readset: vec!["x".into(), "y".into()],
@@ -312,7 +312,7 @@ fn paper_example_3() {
         },
         ver: 25,
     });
-    examiner.learn(&Candidate {
+    examiner.learn(Candidate {
         rec: Record {
             xid: Uuid::from_u128(3),
             readset: vec![],
@@ -322,7 +322,7 @@ fn paper_example_3() {
         },
         ver: 26,
     });
-    examiner.learn(&Candidate {
+    examiner.learn(Candidate {
         rec: Record {
             xid: Uuid::from_u128(4),
             readset: vec!["v".into(), "w".into()],
@@ -343,7 +343,7 @@ fn paper_example_3() {
         ver: 28,
     };
     assert!(!examiner.knows(&candidate));
-    let outcome = examiner.assess(&candidate);
+    let outcome = examiner.assess(candidate.clone());
     assert_eq!(Abort(Antidependency(26), Assertive), outcome);
     assert_knows(&examiner, &candidate)
 }
@@ -352,7 +352,7 @@ fn paper_example_3() {
 fn paper_example_4() {
     let mut examiner = Examiner::new();
     examiner.base = 30;
-    examiner.learn(&Candidate {
+    examiner.learn(Candidate {
         rec: Record {
             xid: Uuid::from_u128(1),
             readset: vec!["x".into(), "y".into()],
@@ -362,7 +362,7 @@ fn paper_example_4() {
         },
         ver: 30,
     });
-    examiner.learn(&Candidate {
+    examiner.learn(Candidate {
         rec: Record {
             xid: Uuid::from_u128(2),
             readset: vec!["x".into(), "y".into()],
@@ -372,7 +372,7 @@ fn paper_example_4() {
         },
         ver: 31,
     });
-    examiner.learn(&Candidate {
+    examiner.learn(Candidate {
         rec: Record {
             xid: Uuid::from_u128(3),
             readset: vec![],
@@ -382,7 +382,7 @@ fn paper_example_4() {
         },
         ver: 32,
     });
-    examiner.learn(&Candidate {
+    examiner.learn(Candidate {
         rec: Record {
             xid: Uuid::from_u128(4),
             readset: vec!["v".into(), "z".into()],
@@ -392,7 +392,7 @@ fn paper_example_4() {
         },
         ver: 33,
     });
-    examiner.learn(&Candidate {
+    examiner.learn(Candidate {
         rec: Record {
             xid: Uuid::from_u128(5),
             readset: vec![],
@@ -413,7 +413,7 @@ fn paper_example_4() {
         ver: 35,
     };
     assert!(!examiner.knows(&candidate));
-    let outcome = examiner.assess(&candidate);
+    let outcome = examiner.assess(candidate.clone());
     assert_eq!(Commit(33, Permissive), outcome);
     assert_knows(&examiner, &candidate)
 }

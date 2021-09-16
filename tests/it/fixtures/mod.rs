@@ -514,7 +514,7 @@ where
                     rec: candidate_message.rec.clone(),
                     ver: offset as u64,
                 };
-                let outcome = certifier.examiner.assess(&candidate);
+                let outcome = certifier.examiner.assess(candidate.clone());
                 log::trace!("Certified {:?} {:?} with {:?}", candidate, &candidate_message.statemap, outcome);
                 let decision_message = match outcome {
                     Outcome::Commit(safepoint, _) => DecisionMessage::Commit(CommitMessage {

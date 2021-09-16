@@ -51,7 +51,7 @@ pub struct AbortMessage {
     pub reason: AbortReason
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Candidate {
     pub rec: Record,
     pub ver: u64,
