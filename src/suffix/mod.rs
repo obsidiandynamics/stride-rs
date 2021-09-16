@@ -176,29 +176,41 @@ impl Suffix {
     ) -> Option<Vec<TruncatedEntry>> {
         assert_ne!(self.base, 0, "uninitialized suffix");
         assert!(min_extent > 0, "invalid min_extent ({})", min_extent);
-        assert!(max_extent >= min_extent, "invalid min_extent ({}), max_extent ({})", min_extent, max_extent);
-        let extent = (self.highest_decided + 1 - self.base) as usize;
+        assert!(
+            max_extent >= min_extent,
+            "invalid min_extent ({}), max_extent ({})",
+            min_extent,
+            max_extent
+        );
+        let base = self.base;
+        let extent = (self.highest_decided + 1 - base) as usize;
         if extent <= max_extent {
             return None;
         }
 
         let num_to_truncate = extent - min_extent;
         let drained = self.entries.drain(..num_to_truncate);
-        let mut truncated = Vec::with_capacity(num_to_truncate);
-        for (entry_index, mut entry) in drained.enumerate() {
-            match entry.take() {
-                None => {}
-                Some(entry) => {
-                    truncated.push(TruncatedEntry {
-                        ver: self.base + entry_index as u64,
-                        readset: entry.readset,
-                        writeset: entry.writeset
-                    });
+        let truncated = drained
+            .enumerate()
+            // .flat_map(|(entry_index, entry)| {
+            //     entry.map(|entry| TruncatedEntry {
+            //         ver: base + entry_index as u64,
+            //         readset: entry.readset,
+            //         writeset: entry.writeset,
+            //     })
+            // })
+            .filter(|(_, entry)| entry.is_some())
+            .map(|(entry_index, entry)| {
+                let entry = entry.unwrap();
+                TruncatedEntry {
+                    ver: base + entry_index as u64,
+                    readset: entry.readset,
+                    writeset: entry.writeset
                 }
-            }
-        }
+            })
+            .collect::<Vec<_>>();
 
-        self.base += num_to_truncate as u64;
+        self.base = base + num_to_truncate as u64;
         Some(truncated)
     }
 }
