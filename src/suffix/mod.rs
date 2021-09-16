@@ -1,13 +1,13 @@
+use crate::suffix::DecideError::NoSuchCandidate;
+use crate::suffix::DecideResult::{Decided, Lapsed, Uninitialized};
 use crate::suffix::InsertError::Nonmonotonic;
 use std::ops::Range;
-use crate::suffix::DecideResult::{Lapsed, Uninitialized, Decided};
-use crate::suffix::DecideError::NoSuchCandidate;
 
 #[derive(Debug, PartialEq)]
 pub struct RetainedEntry {
     pub readset: Vec<String>,
     pub writeset: Vec<String>,
-    pub decided: bool
+    pub decided: bool,
 }
 
 #[derive(Debug, PartialEq)]
@@ -21,7 +21,7 @@ pub struct TruncatedEntry {
 pub struct Suffix {
     base: u64,
     entries: Vec<Option<RetainedEntry>>,
-    highest_decided: u64
+    highest_decided: u64,
 }
 
 impl Default for Suffix {
@@ -32,45 +32,57 @@ impl Default for Suffix {
 
 #[derive(Debug, PartialEq)]
 pub enum InsertError {
-    Nonmonotonic
+    Nonmonotonic,
 }
 
 #[derive(Debug, PartialEq)]
 pub enum DecideResult {
     Uninitialized,
-    Lapsed(u64),          // the low-water mark
-    Decided(u64)          // the highest decided version in the suffix
+    Lapsed(u64),  // the low-water mark
+    Decided(u64), // the highest decided version in the suffix
 }
 
 #[derive(Debug, PartialEq)]
 pub enum DecideError {
-    NoSuchCandidate
+    NoSuchCandidate,
 }
 
 impl Suffix {
     pub fn new(capacity: usize) -> Self {
-        Self { base: 0, entries: Vec::with_capacity(capacity), highest_decided: 0 }
+        Self {
+            base: 0,
+            entries: Vec::with_capacity(capacity),
+            highest_decided: 0,
+        }
     }
 
     pub fn lwm(&self) -> Option<u64> {
         match self.base {
             0 => None,
-            base => Some(base)
+            base => Some(base),
         }
     }
 
     pub fn hwm(&self) -> Option<u64> {
         match self.base {
             0 => None,
-            base => Some(base + self.entries.len() as u64)
+            base => Some(base + self.entries.len() as u64),
         }
     }
 
     pub fn range(&self) -> Range<u64> {
-        Range { start: self.base, end: self.base + self.entries.len() as u64 }
+        Range {
+            start: self.base,
+            end: self.base + self.entries.len() as u64,
+        }
     }
 
-    pub fn insert(&mut self, readset: Vec<String>, writeset: Vec<String>, ver: u64) -> Result<(), InsertError> {
+    pub fn insert(
+        &mut self,
+        readset: Vec<String>,
+        writeset: Vec<String>,
+        ver: u64,
+    ) -> Result<(), InsertError> {
         assert_ne!(0, ver, "unsupported version 0");
         if self.base == 0 {
             // initialize the base offset and highest decided on the first inserted entry
@@ -91,7 +103,7 @@ impl Suffix {
         self.entries.push(Some(RetainedEntry {
             readset,
             writeset,
-            decided: false
+            decided: false,
         }));
 
         Ok(())
@@ -109,8 +121,8 @@ impl Suffix {
 
         return match &self.entries[(ver - self.base) as usize] {
             None => None,
-            Some(entry) => Some(entry)
-        }
+            Some(entry) => Some(entry),
+        };
     }
 
     pub fn decide(&mut self, ver: u64) -> Result<DecideResult, DecideError> {
@@ -123,12 +135,12 @@ impl Suffix {
 
         let index = (ver - self.base) as usize;
         if index >= self.entries.len() {
-            return Err(NoSuchCandidate)
+            return Err(NoSuchCandidate);
         }
 
         match &mut self.entries[index] {
             None => return Err(NoSuchCandidate),
-            Some(item) => item.decided = true
+            Some(item) => item.decided = true,
         }
 
         if ver == self.highest_decided + 1 {
@@ -153,36 +165,52 @@ impl Suffix {
     pub fn highest_decided(&self) -> Option<u64> {
         match self.highest_decided {
             0 => None,
-            highest_decided => Some(highest_decided)
+            highest_decided => Some(highest_decided),
         }
     }
 
-    pub fn truncate(&mut self, min_extent: usize, max_extent: usize) -> Option<Vec<TruncatedEntry>>{
+    pub fn truncate(
+        &mut self,
+        min_extent: usize,
+        max_extent: usize,
+    ) -> Option<Vec<TruncatedEntry>> {
         assert_ne!(self.base, 0, "uninitialized suffix");
         assert!(min_extent > 0, "invalid min_extent ({})", min_extent);
-        assert!(max_extent >= min_extent, "invalid min_extent ({}), max_extent ({})", min_extent, max_extent);
-        let extent = (self.highest_decided + 1 - self.base) as usize;
+        assert!(
+            max_extent >= min_extent,
+            "invalid min_extent ({}), max_extent ({})",
+            min_extent,
+            max_extent
+        );
+        let base = self.base;
+        let extent = (self.highest_decided + 1 - base) as usize;
         if extent <= max_extent {
             return None;
         }
 
         let num_to_truncate = extent - min_extent;
         let drained = self.entries.drain(..num_to_truncate);
-        let mut truncated = Vec::with_capacity(num_to_truncate);
-        for (entry_index, mut entry) in drained.enumerate() {
-            match entry.take() {
-                None => {}
-                Some(entry) => {
-                    truncated.push(TruncatedEntry {
-                        ver: self.base + entry_index as u64,
-                        readset: entry.readset,
-                        writeset: entry.writeset
-                    });
+        let truncated = drained
+            .enumerate()
+            // .flat_map(|(entry_index, entry)| {
+            //     entry.map(|entry| TruncatedEntry {
+            //         ver: base + entry_index as u64,
+            //         readset: entry.readset,
+            //         writeset: entry.writeset,
+            //     })
+            // })
+            .filter(|(_, entry)| entry.is_some())
+            .map(|(entry_index, entry)| {
+                let entry = entry.unwrap();
+                TruncatedEntry {
+                    ver: base + entry_index as u64,
+                    readset: entry.readset,
+                    writeset: entry.writeset
                 }
-            }
-        }
+            })
+            .collect::<Vec<_>>();
 
-        self.base += num_to_truncate as u64;
+        self.base = base + num_to_truncate as u64;
         Some(truncated)
     }
 }
