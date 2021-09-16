@@ -192,13 +192,6 @@ impl Suffix {
         let drained = self.entries.drain(..num_to_truncate);
         let truncated = drained
             .enumerate()
-            // .flat_map(|(entry_index, entry)| {
-            //     entry.map(|entry| TruncatedEntry {
-            //         ver: base + entry_index as u64,
-            //         readset: entry.readset,
-            //         writeset: entry.writeset,
-            //     })
-            // })
             .filter(|(_, entry)| entry.is_some())
             .map(|(entry_index, entry)| {
                 let entry = entry.unwrap();

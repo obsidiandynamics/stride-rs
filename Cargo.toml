@@ -18,13 +18,17 @@ criterion = "0.3"
 #more-asserts = "0.2"
 
 [[bench]]
+name = "cert"
+harness = false
+
+[[bench]]
 name = "examiner"
 harness = false
 
 [[bench]]
-name = "suffix"
+name = "havoc"
 harness = false
 
 [[bench]]
-name = "havoc"
+name = "suffix"
 harness = false

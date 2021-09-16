@@ -4,6 +4,7 @@ use crate::examiner::Discord::{Assertive, Permissive};
 use crate::examiner::Outcome::{Commit, Abort};
 use crate::AbortReason::{Antidependency, Staleness};
 use std::collections::hash_map::Entry;
+use crate::suffix::TruncatedEntry;
 
 #[derive(Debug)]
 pub struct Examiner {
@@ -29,12 +30,19 @@ impl Examiner {
         Examiner {
             reads: FxHashMap::default(),
             writes: FxHashMap::default(),
-            base: 1,
+            base: 0,
+        }
+    }
+
+    fn ensure_initialized(&mut self, ver: u64) {
+        if self.base == 0 {
+            self.base = ver;
         }
     }
 
     pub fn learn(&mut self, candidate: &Candidate) {
         assert_ne!(0, candidate.ver, "unsupported version 0");
+        self.ensure_initialized(candidate.ver);
         for read in candidate.rec.readset.iter() {
             self.reads.insert(read.clone(), candidate.ver);
         }
@@ -72,10 +80,7 @@ impl Examiner {
 
     pub fn assess(&mut self, candidate: &Candidate) -> Outcome {
         assert_ne!(0, candidate.ver, "unsupported version 0");
-
-        // if (true) {
-        //     return Commit(0, Assertive)
-        // }//TODO
+        self.ensure_initialized(candidate.ver);
         let mut safepoint = self.base - 1;
 
         // rule R1: commit write-only transactions
@@ -127,20 +132,45 @@ impl Examiner {
         Commit(safepoint, Permissive)
     }
 
-    pub fn knows(&self, candidate: &Candidate) -> bool {
-        for read in candidate.rec.readset.iter() {
-            match self.reads.get(read) {
-                Some(&ver) if ver >= candidate.ver => {}
-                _ => return false,
+    pub fn discard(&mut self, entry: TruncatedEntry) {
+        assert_ne!(self.base, 0, "uninitialized examiner");
+        assert!(entry.ver >= self.base, "entry.ver ({}) < self.base ({})", entry.ver, self.base);
+        Self::remove_items(&mut self.reads, entry.readset, entry.ver);
+        Self::remove_items(&mut self.writes, entry.writeset, entry.ver);
+        self.base = entry.ver + 1;
+        // for entry_read in entry.readset {
+        //     match self.reads.entry(entry_read) {
+        //         Entry::Occupied(existing) => {
+        //             if *existing.get() == entry.ver {
+        //                 existing.remove();
+        //             }
+        //         }
+        //         Entry::Vacant(_) => {}
+        //     }
+        // }
+    }
+
+    pub fn base(&self) -> Option<u64> {
+        match self.base {
+            0 => None,
+            base => Some(base)
+        }
+    }
+
+    fn remove_items(existing_items: &mut FxHashMap<String, u64>,  items_to_remove: Vec<String>, ver_to_remove: u64) {
+        for item_to_remove in items_to_remove {
+            match existing_items.entry(item_to_remove) {
+                Entry::Occupied(existing) => {
+                    if *existing.get() == ver_to_remove {
+                        existing.remove();
+                    } else {
+                        assert!(ver_to_remove < *existing.get(),
+                                "skipped version {} while trying to remove {}", *existing.get(), ver_to_remove)
+                    }
+                }
+                Entry::Vacant(_) => {}
             }
         }
-        for write in candidate.rec.writeset.iter() {
-            match self.writes.get(write) {
-                Some(&ver) if ver >= candidate.ver => {}
-                _ => return false,
-            }
-        }
-        true
     }
 }
 
