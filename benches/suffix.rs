@@ -14,7 +14,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     });
 
     c.bench_function("suffix_insert_decide", |b| {
-        let (min_extent, max_extent) = (100_000, 200_000);
+        let (min_extent, max_extent) = (10_000, 20_000);
         let mut suffix = Suffix::new(max_extent);
         let mut ver = 1;
         b.iter(|| {
@@ -24,6 +24,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             let range = suffix.range();
             let span = (range.end - range.start) as usize;
             assert!(span > 0 && span <= max_extent, "range {:?}", range);
+            // println!("range {:?}", range);
             ver += 1;
         });
     });
