@@ -1,4 +1,4 @@
-use criterion::{black_box, Criterion, criterion_group, criterion_main, BatchSize};
+use criterion::{Criterion, criterion_group, criterion_main, BatchSize};
 
 use stride::{Candidate, Record};
 use stride::examiner::Discord::Permissive;
@@ -6,9 +6,10 @@ use stride::examiner::Examiner;
 use stride::examiner::Outcome::Commit;
 use stride::suffix::Suffix;
 use uuid::Uuid;
+use stride::suffix::DecideResult::Decided;
 
 fn criterion_benchmark(c: &mut Criterion) {
-    let (min_extent, max_extent) = (100_000, 200_000);
+    let (min_extent, max_extent) = (10_000, 20_000);
     let num_items = 1_000;
     let items = (0..num_items)
         .map(|i| format!("item-{}", i))
@@ -55,7 +56,10 @@ fn criterion_benchmark(c: &mut Criterion) {
                 assert_eq!(Ok(()), result);
                 assert_eq!(Some(candidate.ver + 1), suffix.hwm());
 
+                let ver = candidate.ver;
                 examiner.learn(candidate);
+
+                assert_eq!(Ok(Decided(ver)), suffix.decide(ver));
 
                 let truncated = suffix.truncate(min_extent, max_extent);
                 if let Some(truncated_entries) = truncated {
@@ -85,15 +89,18 @@ fn criterion_benchmark(c: &mut Criterion) {
                 assert_eq!(Ok(()), result);
                 assert_eq!(Some(candidate.ver + 1), suffix.hwm());
 
-                let expected_safepoint = candidate.rec.snapshot;
+                let ver = candidate.ver;
                 let outcome = examiner.assess(candidate);
-                assert_eq!(Commit(expected_safepoint, Permissive), outcome);
+                assert_eq!(Commit(ver - 1, Permissive), outcome);
+
+                assert_eq!(Ok(Decided(ver)), suffix.decide(ver));
 
                 let truncated = suffix.truncate(min_extent, max_extent);
                 if let Some(truncated_entries) = truncated {
                     let range = suffix.range();
                     let span = (range.end - range.start) as usize;
                     assert!(span > 0 && span <= max_extent, "range {:?}", range);
+                    // println!("truncating {:?}", range);
                     for truncated_entry in truncated_entries {
                         examiner.discard(truncated_entry);
                     }
