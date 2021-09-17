@@ -1,48 +1,61 @@
-use criterion::{criterion_group, criterion_main, Criterion, black_box};
+use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 use uuid::Uuid;
 
-use stride::{Candidate, Record};
-use stride::examiner::{Examiner, Discord};
 use stride::examiner::Outcome::Commit;
+use stride::examiner::{Discord, Examiner};
+use stride::{Candidate, Record};
 
 fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function("examiner_learn", |b| {
         let mut examiner = Examiner::new();
-        let mut candidate = Candidate {
-            rec: Record {
-                xid: Uuid::nil(),
-                readset: vec!["x".into()],
-                writeset: vec!["y".into()],
-                readvers: vec![],
-                snapshot: 0,
+        let mut ver = 1;
+        b.iter_batched(
+            || {
+                let candidate = Candidate {
+                    rec: Record {
+                        xid: Uuid::nil(),
+                        readset: vec!["x".into()],
+                        writeset: vec!["y".into()],
+                        readvers: vec![],
+                        snapshot: ver - 1,
+                    },
+                    ver,
+                };
+                ver += 1;
+                candidate
             },
-            ver: 1,
-        };
-        b.iter(|| {
-            examiner.learn(black_box(candidate.clone()));
-            candidate.rec.snapshot += 1;
-            candidate.ver += 1;
-        });
+            |candidate| {
+                examiner.learn(candidate);
+            },
+            BatchSize::SmallInput,
+        )
     });
 
     c.bench_function("examiner_assess", |b| {
         let mut examiner = Examiner::new();
-        let mut candidate = Candidate {
-            rec: Record {
-                xid: Uuid::nil(),
-                readset: vec!["x".into()],
-                writeset: vec!["y".into()],
-                readvers: vec![],
-                snapshot: 0,
+        let mut ver = 1;
+        b.iter_batched(
+            || {
+                let candidate = Candidate {
+                    rec: Record {
+                        xid: Uuid::nil(),
+                        readset: vec!["x".into()],
+                        writeset: vec!["y".into()],
+                        readvers: vec![],
+                        snapshot: ver - 1,
+                    },
+                    ver,
+                };
+                ver += 1;
+                candidate
             },
-            ver: 1,
-        };
-        b.iter(|| {
-            let outcome = examiner.assess(black_box(candidate.clone()));
-            assert_eq!(Commit(candidate.rec.snapshot, Discord::Permissive), outcome);
-            candidate.rec.snapshot += 1;
-            candidate.ver += 1;
-        });
+            |candidate| {
+                let expected_safepoint = candidate.rec.snapshot;
+                let outcome = examiner.assess(candidate);
+                assert_eq!(Commit(expected_safepoint, Discord::Permissive), outcome);
+            },
+            BatchSize::SmallInput,
+        )
     });
 }
 

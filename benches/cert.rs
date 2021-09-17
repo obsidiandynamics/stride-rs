@@ -1,4 +1,4 @@
-use criterion::{black_box, Criterion, criterion_group, criterion_main};
+use criterion::{black_box, Criterion, criterion_group, criterion_main, BatchSize};
 
 use stride::{Candidate, Record};
 use stride::examiner::Discord::Permissive;
@@ -23,85 +23,83 @@ fn criterion_benchmark(c: &mut Criterion) {
         })
         .collect::<Vec<_>>();
 
-    c.bench_function("cert_assess", |b| {
-        let mut suffix = Suffix::new(max_extent);
-        let mut examiner = Examiner::new();
-        let mut ver: u64 = 1;
-        b.iter(|| {
-            let readset = &item_combos[ver as usize % num_combos];
-            let writeset = &item_combos[(ver + 1) as usize % num_combos];
-
-            let result = suffix.insert(
-                black_box(readset.clone()),
-                black_box(writeset.clone()),
-                black_box(ver),
-            );
-            assert_eq!(Ok(()), result);
-            assert_eq!(Some(ver + 1), suffix.hwm());
-
-            let outcome = examiner.assess(black_box(Candidate {
-                rec: Record {
-                    xid: Uuid::from_u128(ver as u128),
-                    readset: readset.clone(),
-                    writeset: writeset.clone(),
-                    readvers: vec![],
-                    snapshot: ver - 1,
-                },
-                ver,
-            }));
-            assert_eq!(Commit(ver - 1, Permissive), outcome);
-            ver += 1;
-
-            let truncated = suffix.truncate(min_extent, max_extent);
-            if let Some(truncated_entries) = truncated {
-                let range = suffix.range();
-                let span = (range.end - range.start) as usize;
-                assert!(span > 0 && span <= max_extent, "range {:?}", range);
-                for truncated_entry in truncated_entries {
-                    examiner.discard(truncated_entry);
-                }
-            }
-        });
-    });
+    let setup_candidate = |ver: &mut u64| {
+        let readset = &item_combos[*ver as usize % num_combos];
+        let writeset = &item_combos[(*ver + 1) as usize % num_combos];
+        let candidate = Candidate {
+            rec: Record {
+                xid: Uuid::from_u128(*ver as u128),
+                readset: readset.clone(),
+                writeset: writeset.clone(),
+                readvers: vec![],
+                snapshot: *ver - 1,
+            },
+            ver: *ver,
+        };
+        *ver += 1;
+        candidate
+    };
 
     c.bench_function("cert_learn", |b| {
         let mut suffix = Suffix::new(max_extent);
         let mut examiner = Examiner::new();
         let mut ver: u64 = 1;
-        b.iter(|| {
-            let readset = &item_combos[ver as usize % num_combos];
-            let writeset = &item_combos[(ver + 1) as usize % num_combos];
+        b.iter_batched(
+            || setup_candidate(&mut ver),
+            |candidate| {
+                let result = suffix.insert(
+                    candidate.rec.readset.clone(),
+                    candidate.rec.writeset.clone(),
+                    candidate.ver,
+                );
+                assert_eq!(Ok(()), result);
+                assert_eq!(Some(candidate.ver + 1), suffix.hwm());
 
-            let result = suffix.insert(
-                black_box(readset.clone()),
-                black_box(writeset.clone()),
-                black_box(ver),
-            );
-            assert_eq!(Ok(()), result);
-            assert_eq!(Some(ver + 1), suffix.hwm());
+                examiner.learn(candidate);
 
-            examiner.learn(black_box(Candidate {
-                rec: Record {
-                    xid: Uuid::from_u128(ver as u128),
-                    readset: readset.clone(),
-                    writeset: writeset.clone(),
-                    readvers: vec![],
-                    snapshot: ver - 1,
-                },
-                ver,
-            }));
-            ver += 1;
-
-            let truncated = suffix.truncate(min_extent, max_extent);
-            if let Some(truncated_entries) = truncated {
-                let range = suffix.range();
-                let span = (range.end - range.start) as usize;
-                assert!(span > 0 && span <= max_extent, "range {:?}", range);
-                for truncated_entry in truncated_entries {
-                    examiner.discard(truncated_entry);
+                let truncated = suffix.truncate(min_extent, max_extent);
+                if let Some(truncated_entries) = truncated {
+                    let range = suffix.range();
+                    let span = (range.end - range.start) as usize;
+                    assert!(span > 0 && span <= max_extent, "range {:?}", range);
+                    for truncated_entry in truncated_entries {
+                        examiner.discard(truncated_entry);
+                    }
                 }
-            }
-        });
+            },
+            BatchSize::SmallInput);
+    });
+
+    c.bench_function("cert_assess", |b| {
+        let mut suffix = Suffix::new(max_extent);
+        let mut examiner = Examiner::new();
+        let mut ver: u64 = 1;
+        b.iter_batched(
+            || setup_candidate(&mut ver),
+            |candidate| {
+                let result = suffix.insert(
+                    candidate.rec.readset.clone(),
+                    candidate.rec.writeset.clone(),
+                    candidate.ver,
+                );
+                assert_eq!(Ok(()), result);
+                assert_eq!(Some(candidate.ver + 1), suffix.hwm());
+
+                let expected_safepoint = candidate.rec.snapshot;
+                let outcome = examiner.assess(candidate);
+                assert_eq!(Commit(expected_safepoint, Permissive), outcome);
+
+                let truncated = suffix.truncate(min_extent, max_extent);
+                if let Some(truncated_entries) = truncated {
+                    let range = suffix.range();
+                    let span = (range.end - range.start) as usize;
+                    assert!(span > 0 && span <= max_extent, "range {:?}", range);
+                    for truncated_entry in truncated_entries {
+                        examiner.discard(truncated_entry);
+                    }
+                }
+            },
+            BatchSize::SmallInput);
     });
 }
 
