@@ -1,12 +1,12 @@
-use criterion::{Criterion, criterion_group, criterion_main, BatchSize};
+use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 
-use stride::{Candidate, Record};
 use stride::examiner::Discord::Permissive;
 use stride::examiner::Examiner;
 use stride::examiner::Outcome::Commit;
-use stride::suffix::Suffix;
-use uuid::Uuid;
 use stride::suffix::DecideResult::Decided;
+use stride::suffix::{Suffix, TruncatedEntry};
+use stride::{Candidate, Record};
+use uuid::Uuid;
 
 fn criterion_benchmark(c: &mut Criterion) {
     let (min_extent, max_extent) = (10_000, 20_000);
@@ -18,8 +18,8 @@ fn criterion_benchmark(c: &mut Criterion) {
     let items_per_combo = 1;
     let item_combos = (0..num_combos)
         .map(|i| {
-            (0..items_per_combo).map(|j| items[(i + j) % num_items]
-                .clone())
+            (0..items_per_combo)
+                .map(|j| items[(i + j) % num_items].clone())
                 .collect::<Vec<_>>()
         })
         .collect::<Vec<_>>();
@@ -61,14 +61,21 @@ fn criterion_benchmark(c: &mut Criterion) {
 
                 assert_eq!(Ok(Decided(ver)), suffix.decide(ver));
 
-                let truncated = suffix.truncate(min_extent, max_extent);
-                if let Some(truncated_entries) = truncated {
+                if {
+                    let truncated = suffix.truncate(min_extent, max_extent);
+                    match truncated {
+                        None => false,
+                        Some(truncated_entries) => {
+                            for truncated_entry in truncated_entries {
+                                examiner.discard(truncated_entry);
+                            }
+                            true
+                        }
+                    }
+                } {
                     let range = suffix.range();
                     let span = (range.end - range.start) as usize;
                     assert!(span > 0 && span <= max_extent, "range {:?}", range);
-                    for truncated_entry in truncated_entries {
-                        examiner.discard(truncated_entry);
-                    }
                 }
             },
             BatchSize::SmallInput);
@@ -95,18 +102,25 @@ fn criterion_benchmark(c: &mut Criterion) {
 
                 assert_eq!(Ok(Decided(ver)), suffix.decide(ver));
 
-                let truncated = suffix.truncate(min_extent, max_extent);
-                if let Some(truncated_entries) = truncated {
+                if {
+                    let truncated = suffix.truncate(min_extent, max_extent);
+                    match truncated {
+                        None => false,
+                        Some(truncated_entries) => {
+                            for truncated_entry in truncated_entries {
+                                examiner.discard(truncated_entry);
+                            }
+                            true
+                        }
+                    }
+                } {
                     let range = suffix.range();
                     let span = (range.end - range.start) as usize;
                     assert!(span > 0 && span <= max_extent, "range {:?}", range);
-                    // println!("truncating {:?}", range);
-                    for truncated_entry in truncated_entries {
-                        examiner.discard(truncated_entry);
-                    }
                 }
             },
-            BatchSize::SmallInput);
+            BatchSize::SmallInput,
+        );
     });
 }
 

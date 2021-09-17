@@ -174,7 +174,7 @@ impl Suffix {
         &mut self,
         min_extent: usize,
         max_extent: usize,
-    ) -> Option<Vec<TruncatedEntry>> {
+    ) -> Option<impl Iterator<Item = TruncatedEntry> + '_> {
         assert_ne!(self.base, 0, "uninitialized suffix");
         assert!(min_extent > 0, "invalid min_extent ({})", min_extent);
         assert!(
@@ -191,20 +191,20 @@ impl Suffix {
 
         let num_to_truncate = extent - min_extent;
         let drained = self.entries.drain(..num_to_truncate);
+        self.base = base + num_to_truncate as u64;
+
         let truncated = drained
             .enumerate()
             .filter(|(_, entry)| entry.is_some())
-            .map(|(entry_index, entry)| {
+            .map(move |(entry_index, entry)| {
                 let entry = entry.unwrap();
                 TruncatedEntry {
                     ver: base + entry_index as u64,
                     readset: entry.readset,
                     writeset: entry.writeset
                 }
-            })
-            .collect::<Vec<_>>();
+            });
 
-        self.base = base + num_to_truncate as u64;
         Some(truncated)
     }
 }

@@ -208,11 +208,15 @@ fn truncate_invalid_args() {
     suffix.truncate(2, 1);
 }
 
+fn collect<I>(opt: Option<I>) -> Option<Vec<TruncatedEntry>> where I: Iterator<Item = TruncatedEntry> {
+    opt.map(|it| it.collect())
+}
+
 #[test]
 fn truncate_none_decided() {
     let mut suffix = Suffix::default();
     assert_eq!(Ok(()), suffix.insert(vec![], vec![], 3));
-    assert_eq!(None, suffix.truncate(1, 1));
+    assert_eq!(None, collect(suffix.truncate(1, 1)));
 }
 
 #[test]
@@ -220,7 +224,7 @@ fn truncate_one_decided_min_1_max_1() {
     let mut suffix = Suffix::default();
     assert_eq!(Ok(()), suffix.insert(vec![], vec![], 3));
     assert_eq!(Ok(Decided(3)), suffix.decide(3));
-    assert_eq!(None, suffix.truncate(1, 1));
+    assert_eq!(None, collect(suffix.truncate(1, 1)));
     assert_eq!((3..4), suffix.range());
 }
 
@@ -233,7 +237,7 @@ fn truncate_two_decided_min_1_max_1() {
     assert_eq!(Ok(Decided(4)), suffix.decide(4));
     assert_eq!((3..5), suffix.range());
     assert_eq!(Some(vec![TruncatedEntry::new(3, &["r3"], &["w3"])]),
-               suffix.truncate(1, 1));
+               collect(suffix.truncate(1, 1)));
     assert_eq!((4..5), suffix.range());
 }
 
@@ -246,7 +250,7 @@ fn truncate_two_decided_min_1_max_2() {
     assert_eq!(Ok(Decided(3)), suffix.decide(3));
     assert_eq!(Ok(Decided(4)), suffix.decide(4));
     assert_eq!((3..6), suffix.range());
-    assert_eq!(None, suffix.truncate(1, 2));
+    assert_eq!(None, collect(suffix.truncate(1, 2)));
     assert_eq!((3..6), suffix.range());
 }
 
@@ -261,16 +265,16 @@ fn truncate_three_decided_min_2_max_2_dense() {
     assert_eq!(Ok(Decided(5)), suffix.decide(5));
     assert_eq!((3..6), suffix.range());
     assert_eq!(Some(vec![TruncatedEntry::new(3, &["r3"], &["w3"])]),
-               suffix.truncate(2, 2));
+               collect(suffix.truncate(2, 2)));
     assert_eq!((4..6), suffix.range());
 
     // truncate the remainder
     assert_eq!(Some(vec![TruncatedEntry::new(4, &["r4"], &["w4"])]),
-               suffix.truncate(1, 1));
+               collect(suffix.truncate(1, 1)));
     assert_eq!((5..6), suffix.range());
 
     // truncate the remainder
-    assert_eq!(None, suffix.truncate(1, 1));
+    assert_eq!(None, collect(suffix.truncate(1, 1)));
     assert_eq!((5..6), suffix.range());
 
     // check leftovers
@@ -287,15 +291,15 @@ fn truncate_three_decided_min_2_max_2_sparse() {
     assert_eq!(Ok(Decided(5)), suffix.decide(5));
     assert_eq!((3..6), suffix.range());
     assert_eq!(Some(vec![TruncatedEntry::new(3, &["r3"], &["w3"])]),
-               suffix.truncate(2, 2));
+               collect(suffix.truncate(2, 2)));
     assert_eq!((4..6), suffix.range());
 
     // truncate the remainder
-    assert_eq!(Some(vec![]), suffix.truncate(1, 1));
+    assert_eq!(Some(vec![]), collect(suffix.truncate(1, 1)));
     assert_eq!((5..6), suffix.range());
 
     // truncate the remainder
-    assert_eq!(None, suffix.truncate(1, 1));
+    assert_eq!(None, collect(suffix.truncate(1, 1)));
     assert_eq!((5..6), suffix.range());
 
     // check leftovers
@@ -316,11 +320,11 @@ fn truncate_three_decided_min_1_max_1() {
     assert_eq!((3..7), suffix.range());
     assert_eq!(Some(vec![TruncatedEntry::new(3, &["r3"], &["w3"]),
                          TruncatedEntry::new(4, &["r4"], &["w4"])]),
-               suffix.truncate(1, 2));
+               collect(suffix.truncate(1, 2)));
     assert_eq!((5..7), suffix.range());
 
     // truncate the remainder
-    assert_eq!(None, suffix.truncate(1, 1));
+    assert_eq!(None, collect(suffix.truncate(1, 1)));
     assert_eq!((5..7), suffix.range());
 
     // check leftovers
