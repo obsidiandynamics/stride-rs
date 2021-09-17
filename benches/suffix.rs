@@ -19,7 +19,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         let mut ver = 1;
         b.iter(|| {
             assert_eq!(Ok(()), suffix.insert(black_box(vec![]), black_box(vec![]), black_box(ver)));
-            assert_eq!(Ok(Decided(ver)), suffix.decide(ver));
+            assert_eq!(Ok(Decided(ver)), suffix.decide(black_box(ver)));
             suffix.truncate(min_extent, max_extent);
             let range = suffix.range();
             let span = (range.end - range.start) as usize;
