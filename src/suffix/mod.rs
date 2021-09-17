@@ -2,6 +2,7 @@ use crate::suffix::DecideError::NoSuchCandidate;
 use crate::suffix::DecideResult::{Decided, Lapsed, Uninitialized};
 use crate::suffix::InsertError::Nonmonotonic;
 use std::ops::Range;
+use std::collections::VecDeque;
 
 #[derive(Debug, PartialEq)]
 pub struct RetainedEntry {
@@ -20,7 +21,7 @@ pub struct TruncatedEntry {
 #[derive(Debug)]
 pub struct Suffix {
     base: u64,
-    entries: Vec<Option<RetainedEntry>>,
+    entries: VecDeque<Option<RetainedEntry>>,
     highest_decided: u64,
 }
 
@@ -51,7 +52,7 @@ impl Suffix {
     pub fn new(capacity: usize) -> Self {
         Self {
             base: 0,
-            entries: Vec::with_capacity(capacity),
+            entries: VecDeque::with_capacity(capacity),
             highest_decided: 0,
         }
     }
@@ -98,9 +99,9 @@ impl Suffix {
         let pad = (ver - hwm) as usize;
         self.entries.reserve(pad + 1);
         for _ in (0..pad).into_iter() {
-            self.entries.push(None)
+            self.entries.push_back(None)
         }
-        self.entries.push(Some(RetainedEntry {
+        self.entries.push_back(Some(RetainedEntry {
             readset,
             writeset,
             decided: false,
