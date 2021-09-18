@@ -78,20 +78,21 @@ impl Config {
 struct SimContext<'a, S> {
     model: &'a Model<'a, S>,
     trace: &'a mut Trace,
-    schedule: usize
+    schedule: usize,
+    seed: u64,
 }
 
 impl<'a, S> SimContext<'a, S> {
     fn hash(&self) -> u64 {
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
         hasher.write_usize(0x517cc1b727220a95); // K from FxHasher
+        hasher.write_u64(self.schedule as u64 + self.seed);
         for call in &self.trace.calls {
             hasher.write_usize(call.action);
             for &rand in &call.rands {
                 hasher.write_u64(rand);
             }
         }
-        hasher.write_usize(self.schedule);
         hasher.finish()
     }
 }
@@ -215,7 +216,8 @@ impl<'a, S> Sim<'a, S> {
                 let mut context = SimContext {
                     model: &self.model,
                     trace: &mut trace,
-                    schedule: stats.completed
+                    schedule: stats.completed,
+                    seed: self.seed
                 };
 
                 let result = (*action_entry.action)(&mut state, &mut context);

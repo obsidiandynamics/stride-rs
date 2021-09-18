@@ -402,6 +402,10 @@ fn sim_rand() {
     // repeat run should yield the same random numbers
     assert_eq!(Pass, Sim::new(&model).with_config(default_config()).check());
     assert_eq!(NUM_RUNS * 2, generated.borrow().len() as i64);
+
+    // differently seeded run will yield different random numbers
+    assert_eq!(Pass, Sim::new(&model).with_config(default_config()).with_seed(1).check());
+    assert_eq!(NUM_RUNS * 4, generated.borrow().len() as i64);
 }
 
 #[test]
