@@ -93,7 +93,6 @@ fn dfs_marbles_1x1() {
 }
 
 #[test]
-#[ignore]
 fn dfs_marbles_1x2() {
     dfs(&build_model(2, 1, 2, name_of(&dfs_marbles_1x2)));
 }

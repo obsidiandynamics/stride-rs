@@ -85,7 +85,6 @@ fn dfs_blind_1x1() {
 }
 
 #[test]
-#[ignore]
 fn dfs_blind_1x2() {
     dfs(&build_model(1, 2, name_of(&dfs_blind_1x2)));
 }

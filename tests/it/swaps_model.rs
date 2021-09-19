@@ -81,7 +81,6 @@ fn dfs_swaps_1x1() {
 }
 
 #[test]
-#[ignore]
 fn dfs_swaps_1x2() {
     dfs(&build_model(
         &[(0, 1)],

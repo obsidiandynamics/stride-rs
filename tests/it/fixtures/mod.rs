@@ -480,35 +480,45 @@ where
     A: Fn(&[Cohort]) -> Box<dyn Fn(&[Cohort]) -> Option<String>>,
 {
     move |s, _| {
-        let message = {
-            let cohort = &mut s.cohorts()[cohort_index];
-            cohort.stream.consume()
-        };
-        match message {
-            None => Blocked,
-            Some((_, message)) => {
-                match message.deref() {
-                    Message::Candidate(_) => {},
-                    Message::Decision(decision) => {
-                        match decision {
-                            DecisionMessage::Commit(commit) => {
-                                let after_check = asserter(&s.cohorts());
-                                let cohort = &mut s.cohorts()[cohort_index];
-                                cohort
-                                    .replica
-                                    .install_ser(&commit.statemap, commit.candidate.ver);
-                                if let Some(error) = after_check(&s.cohorts()) {
-                                    return Breached(error);
+        let mut at_least_one_decision_consumed = false;
+        loop {
+            // looping lets us skip over candidates that appear ahead of the next decision in the
+            // stream, reducing the model diameter
+            match s.cohorts()[cohort_index].stream.consume() {
+                None => {
+                    return if at_least_one_decision_consumed {
+                        Ran
+                    } else {
+                        Blocked
+                    }
+                },
+                Some((_, message)) => {
+                    match message.deref() {
+                        Message::Candidate(_) => {},
+                        Message::Decision(decision) => {
+                            at_least_one_decision_consumed = true;
+                            match decision {
+                                DecisionMessage::Commit(commit) => {
+                                    let after_check = asserter(&s.cohorts());
+                                    let cohort = &mut s.cohorts()[cohort_index];
+                                    cohort
+                                        .replica
+                                        .install_ser(&commit.statemap, commit.candidate.ver);
+                                    if let Some(error) = after_check(&s.cohorts()) {
+                                        return Breached(error);
+                                    }
                                 }
-                            }
-                            DecisionMessage::Abort(abort) => {
-                                log::trace!("ABORTED {:?}", abort.reason);
+                                DecisionMessage::Abort(abort) => {
+                                    log::trace!("ABORTED {:?}", abort.reason);
+                                }
                             }
                         }
                     }
+                    if at_least_one_decision_consumed {
+                        return Ran;
+                    }
                 }
-                Ran
-            }
+            };
         }
     }
 }

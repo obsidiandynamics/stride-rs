@@ -100,7 +100,6 @@ fn dfs_bank_2x1x1() {
 }
 
 #[test]
-#[ignore]
 fn dfs_bank_2x1x2() {
     dfs(&build_model(&[101, 103], 1, 2, name_of(&dfs_bank_2x1x2)));
 }
