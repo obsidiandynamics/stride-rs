@@ -10,6 +10,22 @@ pub enum Message<S: Clone> {
     Decision(DecisionMessage<S>),
 }
 
+impl <S: Clone> Message<S> {
+    pub fn as_candidate(&self) -> Option<&CandidateMessage<S>> {
+        match self {
+            Message::Candidate(candidate) => Some(candidate),
+            Message::Decision(_) => None
+        }
+    }
+
+    pub fn as_decision(&self) -> Option<&DecisionMessage<S>> {
+        match self {
+            Message::Candidate(_) => None,
+            Message::Decision(decision) => Some(decision)
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct CandidateMessage<S: Clone> {
     pub rec: Record,

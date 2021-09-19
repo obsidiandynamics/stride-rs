@@ -5,6 +5,7 @@ use stride::havoc::model::ActionResult::{Joined, Ran, Blocked};
 use stride::havoc::model::Retention::{Strong, Weak};
 use stride::havoc::model::{name_of, Model};
 use stride::*;
+use Message::Candidate;
 
 fn asserter(cohort_index: usize) -> impl Fn(&[Cohort]) -> Box<dyn Fn(&[Cohort]) -> Option<String>> {
     move |before| {
@@ -73,7 +74,7 @@ fn build_model<'a>(
             let changes = &[(0, item_val + 1)];
             let (readvers, snapshot) = Record::compress(cpt_readvers, cpt_snapshot);
             let statemap = Statemap::map(changes, Op::Set);
-            cohort.candidates.produce(Rc::new(CandidateMessage {
+            cohort.stream.produce(Rc::new(Candidate(CandidateMessage {
                 rec: Record {
                     xid: uuidify(cohort_index, run),
                     readset,
@@ -82,7 +83,7 @@ fn build_model<'a>(
                     snapshot,
                 },
                 statemap,
-            }));
+            })));
             if run + 1 == txns_per_cohort {
                 Joined
             } else {
@@ -104,7 +105,7 @@ fn build_model<'a>(
             let changes = &[(1, source_item_val)];
             let (readvers, snapshot) = Record::compress(cpt_readvers, cpt_snapshot);
             let statemap = Statemap::map(changes, Op::Set);
-            cohort.candidates.produce(Rc::new(CandidateMessage {
+            cohort.stream.produce(Rc::new(Candidate(CandidateMessage {
                 rec: Record {
                     xid: uuidify(cohort_index, run),
                     readset,
@@ -113,7 +114,7 @@ fn build_model<'a>(
                     snapshot,
                 },
                 statemap,
-            }));
+            })));
             if run + 1 == txns_per_cohort {
                 Joined
             } else {
@@ -134,6 +135,7 @@ fn dfs_monotonic_1x1() {
 }
 
 #[test]
+#[ignore]
 fn dfs_monotonic_1x2() {
     dfs(&build_model(1, 2, name_of(&dfs_monotonic_1x2)));
 }

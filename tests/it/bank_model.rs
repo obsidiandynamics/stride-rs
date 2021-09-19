@@ -5,6 +5,7 @@ use stride::havoc::model::ActionResult::{Joined, Ran, Blocked};
 use stride::havoc::model::Retention::{Strong, Weak};
 use stride::havoc::model::{name_of, Model, rand_element};
 use stride::*;
+use Message::Candidate;
 
 fn asserter(values: &[i32], cohort_index: usize) -> impl Fn(&[Cohort]) -> Box<dyn Fn(&[Cohort]) -> Option<String>> {
     let expected_sum: i32 = values.iter().sum();
@@ -69,7 +70,7 @@ fn build_model<'a>(
             let changes = &[(from, from_val - xfer_amount), (to, to_val + xfer_amount)];
             let (readvers, snapshot) = Record::compress(cpt_readvers, cpt_snapshot);
             let statemap = Statemap::map(changes, Op::Set);
-            cohort.candidates.produce(Rc::new(CandidateMessage {
+            cohort.stream.produce(Rc::new(Candidate(CandidateMessage {
                 rec: Record {
                     xid: uuidify(cohort_index, run),
                     readset,
@@ -78,7 +79,7 @@ fn build_model<'a>(
                     snapshot,
                 },
                 statemap,
-            }));
+            })));
             if run + 1 == txns_per_cohort {
                 Joined
             } else {
@@ -99,6 +100,7 @@ fn dfs_bank_2x1x1() {
 }
 
 #[test]
+#[ignore]
 fn dfs_bank_2x1x2() {
     dfs(&build_model(&[101, 103], 1, 2, name_of(&dfs_bank_2x1x2)));
 }

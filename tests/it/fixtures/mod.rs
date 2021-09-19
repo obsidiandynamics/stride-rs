@@ -15,9 +15,9 @@ use stride::havoc::model::ActionResult::{Blocked, Breached, Joined, Ran};
 use stride::havoc::model::{rand_element, ActionResult, Context, Model};
 use stride::havoc::sim::{Sim, SimResult};
 use stride::havoc::{checker, sim, Sublevel};
-use stride::{
-    AbortMessage, Candidate, CandidateMessage, CommitMessage, DecisionMessage};
+use stride::{AbortMessage, Candidate, CommitMessage, DecisionMessage, Message};
 use stride::examiner::{Examiner, Outcome};
+use stride::Message::Decision;
 
 #[derive(Debug)]
 pub struct SystemState {
@@ -27,20 +27,17 @@ pub struct SystemState {
 
 impl SystemState {
     pub fn new(num_cohorts: usize, values: &[i32]) -> Self {
-        let candidates_broker = Broker::new(1);
-        let decisions_broker = Broker::new(1);
+        let broker = Broker::new(1);
         let cohorts = (0..num_cohorts)
             .into_iter()
             .map(|_| Cohort {
                 replica: Replica::new(&values),
-                candidates: candidates_broker.stream(),
-                decisions: decisions_broker.stream(),
+                stream: broker.stream(),
             })
             .collect();
         let certifier = Certifier {
             examiner: Examiner::new(),
-            candidates: candidates_broker.stream(),
-            decisions: decisions_broker.stream(),
+            stream: broker.stream(),
         };
 
         SystemState {
@@ -50,13 +47,18 @@ impl SystemState {
     }
 
     pub fn total_txns(&self) -> usize {
-        self.certifier.candidates.len()
+        self.certifier.stream.count(|msg| msg.as_candidate().is_some())
     }
 
     pub fn cohort_txns(&self, cohort_index: usize) -> usize {
-        self.certifier.candidates.count(|msg| {
-            let (pid, _) = deuuid::<usize, usize>(msg.rec.xid);
-            pid == cohort_index
+        self.certifier.stream.count(|msg| {
+            match msg {
+                Message::Candidate(candidate) => {
+                    let (pid, _) = deuuid::<usize, usize>(candidate.rec.xid);
+                    pid == cohort_index
+                }
+                Message::Decision(_) => false
+            }
         })
     }
 }
@@ -109,15 +111,13 @@ impl Statemap {
 #[derive(Debug)]
 pub struct Cohort {
     pub replica: Replica,
-    pub candidates: Stream<CandidateMessage<Statemap>>,
-    pub decisions: Stream<DecisionMessage<Statemap>>,
+    pub stream: Stream<Message<Statemap>>,
 }
 
 #[derive(Debug)]
 pub struct Certifier {
     pub examiner: Examiner,
-    pub candidates: Stream<CandidateMessage<Statemap>>,
-    pub decisions: Stream<DecisionMessage<Statemap>>,
+    pub stream: Stream<Message<Statemap>>,
 }
 
 #[derive(Debug)]
@@ -435,13 +435,20 @@ where
     move |s, c| {
         let installable_commits = {
             let cohort = &mut s.cohorts()[cohort_index];
-            cohort.decisions.find(|decision| match decision {
-                DecisionMessage::Commit(commit) => cohort.replica.can_install_ooo(
-                    &commit.statemap,
-                    commit.safepoint,
-                    commit.candidate.ver,
-                ),
-                DecisionMessage::Abort(_) => false,
+            cohort.stream.find(|message| {
+                match message {
+                    Message::Candidate(_) => false,
+                    Message::Decision(decision) => {
+                        match decision {
+                            DecisionMessage::Commit(commit) => cohort.replica.can_install_ooo(
+                                &commit.statemap,
+                                commit.safepoint,
+                                commit.candidate.ver,
+                            ),
+                            DecisionMessage::Abort(_) => false,
+                        }
+                    }
+                }
             })
         };
 
@@ -450,7 +457,7 @@ where
             let (_, commit) = rand_element(c, &installable_commits);
             let after_check = asserter(&s.cohorts());
             let cohort = &mut s.cohorts()[cohort_index];
-            let commit = commit.as_commit().unwrap();
+            let commit = commit.as_decision().unwrap().as_commit().unwrap();
             cohort
                 .replica
                 .install_ooo(&commit.statemap, commit.safepoint, commit.candidate.ver);
@@ -473,26 +480,31 @@ where
     A: Fn(&[Cohort]) -> Box<dyn Fn(&[Cohort]) -> Option<String>>,
 {
     move |s, _| {
-        let decision = {
+        let message = {
             let cohort = &mut s.cohorts()[cohort_index];
-            cohort.decisions.consume()
+            cohort.stream.consume()
         };
-        match decision {
+        match message {
             None => Blocked,
-            Some((_, decision)) => {
-                match decision.deref() {
-                    DecisionMessage::Commit(commit) => {
-                        let after_check = asserter(&s.cohorts());
-                        let cohort = &mut s.cohorts()[cohort_index];
-                        cohort
-                            .replica
-                            .install_ser(&commit.statemap, commit.candidate.ver);
-                        if let Some(error) = after_check(&s.cohorts()) {
-                            return Breached(error);
+            Some((_, message)) => {
+                match message.deref() {
+                    Message::Candidate(_) => {},
+                    Message::Decision(decision) => {
+                        match decision {
+                            DecisionMessage::Commit(commit) => {
+                                let after_check = asserter(&s.cohorts());
+                                let cohort = &mut s.cohorts()[cohort_index];
+                                cohort
+                                    .replica
+                                    .install_ser(&commit.statemap, commit.candidate.ver);
+                                if let Some(error) = after_check(&s.cohorts()) {
+                                    return Breached(error);
+                                }
+                            }
+                            DecisionMessage::Abort(abort) => {
+                                log::trace!("ABORTED {:?}", abort.reason);
+                            }
                         }
-                    }
-                    DecisionMessage::Abort(abort) => {
-                        log::trace!("ABORTED {:?}", abort.reason);
                     }
                 }
                 Ran
@@ -507,26 +519,31 @@ where
 {
     |s, _| {
         let certifier = s.certifier();
-        match certifier.candidates.consume() {
+        match certifier.stream.consume() {
             None => Blocked,
-            Some((offset, candidate_message)) => {
-                let candidate = Candidate {
-                    rec: candidate_message.rec.clone(),
-                    ver: offset as u64,
-                };
-                let outcome = certifier.examiner.assess(candidate.clone());
-                log::trace!("Certified {:?} {:?} with {:?}", candidate, &candidate_message.statemap, outcome);
-                let decision_message = match outcome {
-                    Outcome::Commit(safepoint, _) => DecisionMessage::Commit(CommitMessage {
-                        candidate,
-                        safepoint,
-                        statemap: candidate_message.statemap.clone(),
-                    }),
-                    Outcome::Abort(reason, _) => {
-                        DecisionMessage::Abort(AbortMessage { candidate, reason })
+            Some((offset, message)) => {
+                match message.deref() {
+                    Message::Candidate(candidate_message) => {
+                        let candidate = Candidate {
+                            rec: candidate_message.rec.clone(),
+                            ver: offset as u64,
+                        };
+                        let outcome = certifier.examiner.assess(candidate.clone());
+                        log::trace!("Certified {:?} {:?} with {:?}", candidate, &candidate_message.statemap, outcome);
+                        let decision_message = match outcome {
+                            Outcome::Commit(safepoint, _) => DecisionMessage::Commit(CommitMessage {
+                                candidate,
+                                safepoint,
+                                statemap: candidate_message.statemap.clone(),
+                            }),
+                            Outcome::Abort(reason, _) => {
+                                DecisionMessage::Abort(AbortMessage { candidate, reason })
+                            }
+                        };
+                        certifier.stream.produce(Rc::new(Decision(decision_message)));
                     }
-                };
-                certifier.decisions.produce(Rc::new(decision_message));
+                    Message::Decision(_) => {}
+                }
                 Ran
             }
         }
@@ -543,7 +560,7 @@ where
         let cohorts = s.cohorts();
         let finished_cohorts = cohorts
             .iter()
-            .filter(|&cohort| cohort.decisions.offset() == expected_txns + 1)
+            .filter(|&cohort| cohort.stream.offset() == expected_txns * 2 + 1)
             .count();
         if finished_cohorts == cohorts.len() {
             Joined
