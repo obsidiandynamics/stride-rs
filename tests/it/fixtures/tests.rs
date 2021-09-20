@@ -1,14 +1,10 @@
-use crate::fixtures::{deuuid, uuidify, Broker, Replica, Statemap, Op, Xdb};
+use crate::fixtures::{deuuid, uuidify, Broker, Replica, Statemap, Op};
 use std::convert::{TryFrom, TryInto};
 use std::fmt::Debug;
 use std::mem::size_of;
 use std::rc::Rc;
 use std::str::FromStr;
 use uuid::Uuid;
-use stride::examiner::Discord::{Assertive, Permissive};
-use stride::examiner::Outcome::{Commit, Abort};
-use crate::fixtures::XdbAssignmentError::Conflict;
-use stride::examiner::AbortReason::Staleness;
 
 #[test]
 fn replica_install_items() {
@@ -75,42 +71,6 @@ fn replica_install_ser() {
     replica.install_ser(&Statemap::map(&[(0, 11)], Op::Set), 6);
     assert_eq!(vec![(11, 6), (20, 5), (30, 5)], replica.items);
     assert_eq!(6, replica.ver);
-}
-
-#[test]
-fn xdb_assign_assertive_without_conflict() {
-    let mut xdb = Xdb::new();
-    assert_eq!(Ok(Commit(7, Assertive)),
-               xdb.assign(Uuid::from_u128(0u128), &Commit(7, Assertive)));
-    assert_eq!(Ok(Commit(7, Assertive)),
-               xdb.assign(Uuid::from_u128(0u128), &Commit(9, Assertive)));
-}
-
-#[test]
-fn xdb_assign_assertive_with_conflict() {
-    let mut xdb = Xdb::new();
-    assert_eq!(Ok(Commit(7, Assertive)),
-               xdb.assign(Uuid::from_u128(0u128), &Commit(7, Assertive)));
-    assert_eq!(Err(Conflict { existing: Commit(7, Assertive), new: Abort(Staleness, Assertive)}),
-               xdb.assign(Uuid::from_u128(0u128), &Abort(Staleness, Assertive)));
-}
-
-#[test]
-fn xdb_assign_permissive_without_change() {
-    let mut xdb = Xdb::new();
-    assert_eq!(Ok(Commit(7, Assertive)),
-               xdb.assign(Uuid::from_u128(0u128), &Commit(7, Assertive)));
-    assert_eq!(Ok(Commit(7, Assertive)),
-               xdb.assign(Uuid::from_u128(0u128), &Commit(9, Permissive)));
-}
-
-#[test]
-fn xdb_assign_permissive_with_change() {
-    let mut xdb = Xdb::new();
-    assert_eq!(Ok(Commit(7, Assertive)),
-               xdb.assign(Uuid::from_u128(0u128), &Commit(7, Assertive)));
-    assert_eq!(Ok(Commit(7, Assertive)),
-               xdb.assign(Uuid::from_u128(0u128), &Abort(Staleness, Permissive)));
 }
 
 #[test]
