@@ -16,7 +16,7 @@ use stride::havoc::model::ActionResult::{Blocked, Breached, Joined, Ran};
 use stride::havoc::model::{rand_element, ActionResult, Context, Model};
 use stride::havoc::sim::{Sim, SimResult};
 use stride::havoc::{checker, sim, Sublevel};
-use stride::suffix::Suffix;
+use stride::suffix::{Suffix};
 use stride::Message::Decision;
 use stride::{AbortMessage, Candidate, CommitMessage, DecisionMessage, Message};
 
@@ -516,9 +516,7 @@ where
                                         return Breached(error);
                                     }
                                 }
-                                DecisionMessage::Abort(abort) => {
-                                    log::trace!("ABORTED {:?}", abort.reason);
-                                }
+                                DecisionMessage::Abort(_) => {}
                             }
                         }
                     }
@@ -579,15 +577,26 @@ where
                             .produce(Rc::new(Decision(decision_message)));
                     }
                     Message::Decision(decision) => {
+                        log::trace!("decision {:?}", decision.candidate());
                         let result = certifier.suffix.decide(decision.candidate().ver);
                         if let Err(error) = result {
                             return Breached(format!("suffix decision error: {:?}", error));
                         }
-                        let truncated = certifier.suffix.truncate(extent, extent);
-                        if let Some(truncated_entries) = truncated {
-                            for truncated_entry in truncated_entries {
-                                certifier.examiner.discard(truncated_entry);
+
+                        if {
+                            let truncated = certifier.suffix.truncate(extent, extent);
+                            match truncated {
+                                None => false,
+                                Some(truncated_entries) => {
+                                    for truncated_entry in truncated_entries {
+                                        log::trace!("  truncating {:?}", truncated_entry);
+                                        certifier.examiner.discard(truncated_entry);
+                                    }
+                                    true
+                                }
                             }
+                        } {
+                            log::trace!("    range {:?}", certifier.suffix.range());
                         }
                     }
                 }

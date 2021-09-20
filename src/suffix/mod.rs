@@ -183,13 +183,13 @@ impl Suffix {
             min_extent,
             max_extent
         );
-        let base = self.base;
-        let extent = (self.highest_decided + 1 - base) as usize;
-        if extent <= max_extent {
+
+        if self.entries.len() <= max_extent {
             return None;
         }
-
-        let num_to_truncate = extent - min_extent;
+        let base = self.base;
+        let overhang = (self.highest_decided + 1 - base) as usize;
+        let num_to_truncate = std::cmp::min(self.entries.len() - min_extent, overhang);
         let drained = self.entries.drain(..num_to_truncate);
         self.base = base + num_to_truncate as u64;
 

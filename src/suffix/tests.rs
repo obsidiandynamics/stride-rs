@@ -7,10 +7,6 @@ impl Suffix {
     fn enumerate(&self) -> impl Iterator<Item = (u64, &Option<RetainedEntry>)> {
         self.range().into_iter().zip(self.entries.iter())
     }
-
-    // fn _insert(&mut self, readset: &[&str], writeset: &[&str], ver: u64) -> Result<(), InsertError> {
-    //     self.insert(vectorize(readset), vectorize(writeset), ver)
-    // }
 }
 
 #[test]
@@ -246,11 +242,95 @@ fn truncate_two_decided_min_1_max_2() {
     let mut suffix = Suffix::default();
     assert_eq!(Ok(()), suffix.insert(vec!["r3".into()], vec!["w3".into()], 3));
     assert_eq!(Ok(()), suffix.insert(vec!["r4".into()], vec!["w4".into()], 4));
+    assert_eq!(Ok(Decided(3)), suffix.decide(3));
+    assert_eq!(Ok(Decided(4)), suffix.decide(4));
+    assert_eq!((3..5), suffix.range());
+    assert_eq!(None, collect(suffix.truncate(1, 2)));
+    assert_eq!((3..5), suffix.range());
+}
+
+#[test]
+fn truncate_two_decided_one_undecided_min_1_max_1() {
+    let mut suffix = Suffix::default();
+    assert_eq!(Ok(()), suffix.insert(vec!["r3".into()], vec!["w3".into()], 3));
+    assert_eq!(Ok(()), suffix.insert(vec!["r4".into()], vec!["w4".into()], 4));
     assert_eq!(Ok(()), suffix.insert(vec!["r5".into()], vec!["w5".into()], 5));
     assert_eq!(Ok(Decided(3)), suffix.decide(3));
     assert_eq!(Ok(Decided(4)), suffix.decide(4));
     assert_eq!((3..6), suffix.range());
-    assert_eq!(None, collect(suffix.truncate(1, 2)));
+    assert_eq!(Some(vec![TruncatedEntry::new(3, &["r3"], &["w3"]),
+                         TruncatedEntry::new(4, &["r4"], &["w4"])]),
+               collect(suffix.truncate(1, 1)));
+    assert_eq!((5..6), suffix.range());
+}
+
+#[test]
+fn truncate_two_decided_one_undecided_min_1_max_2() {
+    let mut suffix = Suffix::default();
+    assert_eq!(Ok(()), suffix.insert(vec!["r3".into()], vec!["w3".into()], 3));
+    assert_eq!(Ok(()), suffix.insert(vec!["r4".into()], vec!["w4".into()], 4));
+    assert_eq!(Ok(()), suffix.insert(vec!["r5".into()], vec!["w5".into()], 5));
+    assert_eq!(Ok(Decided(3)), suffix.decide(3));
+    assert_eq!(Ok(Decided(4)), suffix.decide(4));
+    assert_eq!((3..6), suffix.range());
+    assert_eq!(Some(vec![TruncatedEntry::new(3, &["r3"], &["w3"]),
+                         TruncatedEntry::new(4, &["r4"], &["w4"])]),
+               collect(suffix.truncate(1, 2)));
+    assert_eq!((5..6), suffix.range());
+}
+
+#[test]
+fn truncate_two_decided_one_undecided_min_1_max_3() {
+    let mut suffix = Suffix::default();
+    assert_eq!(Ok(()), suffix.insert(vec!["r3".into()], vec!["w3".into()], 3));
+    assert_eq!(Ok(()), suffix.insert(vec!["r4".into()], vec!["w4".into()], 4));
+    assert_eq!(Ok(()), suffix.insert(vec!["r5".into()], vec!["w5".into()], 5));
+    assert_eq!(Ok(Decided(3)), suffix.decide(3));
+    assert_eq!(Ok(Decided(4)), suffix.decide(4));
+    assert_eq!((3..6), suffix.range());
+    assert_eq!(None, collect(suffix.truncate(1, 3)));
+    assert_eq!((3..6), suffix.range());
+}
+
+#[test]
+fn truncate_two_decided_one_undecided_min_2_max_2() {
+    let mut suffix = Suffix::default();
+    assert_eq!(Ok(()), suffix.insert(vec!["r3".into()], vec!["w3".into()], 3));
+    assert_eq!(Ok(()), suffix.insert(vec!["r4".into()], vec!["w4".into()], 4));
+    assert_eq!(Ok(()), suffix.insert(vec!["r5".into()], vec!["w5".into()], 5));
+    assert_eq!(Ok(Decided(3)), suffix.decide(3));
+    assert_eq!(Ok(Decided(4)), suffix.decide(4));
+    assert_eq!((3..6), suffix.range());
+    assert_eq!(Some(vec![TruncatedEntry::new(3, &["r3"], &["w3"])]),
+               collect(suffix.truncate(2, 2)));
+    assert_eq!((4..6), suffix.range());
+}
+
+#[test]
+fn truncate_two_decided_one_undecided_min_2_max_3() {
+    let mut suffix = Suffix::default();
+    assert_eq!(Ok(()), suffix.insert(vec!["r3".into()], vec!["w3".into()], 3));
+    assert_eq!(Ok(()), suffix.insert(vec!["r4".into()], vec!["w4".into()], 4));
+    assert_eq!(Ok(()), suffix.insert(vec!["r5".into()], vec!["w5".into()], 5));
+    assert_eq!(Ok(Decided(3)), suffix.decide(3));
+    assert_eq!(Ok(Decided(4)), suffix.decide(4));
+    assert_eq!((3..6), suffix.range());
+    assert_eq!(None,
+               collect(suffix.truncate(2, 3)));
+    assert_eq!((3..6), suffix.range());
+}
+
+#[test]
+fn truncate_two_decided_one_undecided_min_3_max_3() {
+    let mut suffix = Suffix::default();
+    assert_eq!(Ok(()), suffix.insert(vec!["r3".into()], vec!["w3".into()], 3));
+    assert_eq!(Ok(()), suffix.insert(vec!["r4".into()], vec!["w4".into()], 4));
+    assert_eq!(Ok(()), suffix.insert(vec!["r5".into()], vec!["w5".into()], 5));
+    assert_eq!(Ok(Decided(3)), suffix.decide(3));
+    assert_eq!(Ok(Decided(4)), suffix.decide(4));
+    assert_eq!((3..6), suffix.range());
+    assert_eq!(None,
+               collect(suffix.truncate(3, 3)));
     assert_eq!((3..6), suffix.range());
 }
 
@@ -319,16 +399,16 @@ fn truncate_three_decided_min_1_max_1() {
     assert_eq!(Ok(Decided(5)), suffix.decide(5));
     assert_eq!((3..7), suffix.range());
     assert_eq!(Some(vec![TruncatedEntry::new(3, &["r3"], &["w3"]),
-                         TruncatedEntry::new(4, &["r4"], &["w4"])]),
+                         TruncatedEntry::new(4, &["r4"], &["w4"]),
+                         TruncatedEntry::new(5, &["r5"], &["w5"])]),
                collect(suffix.truncate(1, 2)));
-    assert_eq!((5..7), suffix.range());
+    assert_eq!((6..7), suffix.range());
 
     // truncate the remainder
     assert_eq!(None, collect(suffix.truncate(1, 1)));
-    assert_eq!((5..7), suffix.range());
+    assert_eq!((6..7), suffix.range());
 
     // check leftovers
-    assert_eq!(vec![(5, &Some(RetainedEntry::decided(&["r5"], &["w5"]))),
-                    (6, &Some(RetainedEntry::undecided(&["r6"], &["w6"])))],
+    assert_eq!(vec![(6, &Some(RetainedEntry::undecided(&["r6"], &["w6"])))],
                suffix.enumerate().collect::<Vec<_>>());
 }

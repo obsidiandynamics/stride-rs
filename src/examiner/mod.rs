@@ -95,6 +95,7 @@ impl Examiner {
 
         // rule R2: conditionally abort transactions outside the suffix
         if candidate.rec.snapshot < self.base - 1 {
+            // println!("{} VENTURING snapshot {} base {}", candidate.ver, candidate.rec.snapshot, self.base);
             self.learn(candidate);
             return Abort(Staleness, Permissive);
         }
