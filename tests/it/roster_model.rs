@@ -20,21 +20,25 @@ fn asserter(cohort_index: usize) -> impl Fn(&[Cohort]) -> Box<dyn Fn(&[Cohort]) 
     }
 }
 
-fn build_model<'a>(
+struct RosterCfg<'a> {
     num_values: usize,
     num_cohorts: usize,
     txns_per_cohort: usize,
-    name: &str,
-) -> Model<'a, SystemState> {
-    // initial values are alternating 0s and 1s (0 means rostered off, 1 means rostered on)
-    let values: Vec<i32> = (0..num_values).map(|i| (i % 2) as i32).collect();
-    let mut model = Model::new(move || SystemState::new(num_cohorts, &values)).with_name(name.into());
-    let expected_txns = num_cohorts * txns_per_cohort;
+    extent: usize,
+    name: &'a str
+}
 
-    for cohort_index in 0..num_cohorts {
-        let itemset: Vec<String> = (0..num_values).map(|i| format!("item-{}", i)).collect();
+fn build_model(cfg: RosterCfg) -> Model<SystemState> {
+    // initial values are alternating 0s and 1s (0 means rostered off, 1 means rostered on)
+    let values: Vec<i32> = (0..cfg.num_values).map(|i| (i % 2) as i32).collect();
+    let num_cohorts = cfg.num_cohorts;
+    let mut model = Model::new(move || SystemState::new(num_cohorts, &values)).with_name(cfg.name.into());
+    let expected_txns = cfg.num_cohorts * cfg.txns_per_cohort;
+
+    for cohort_index in 0..cfg.num_cohorts {
+        let itemset: Vec<String> = (0..cfg.num_values).map(|i| format!("item-{}", i)).collect();
         // each cohort is assigned a specific item
-        let our_item = cohort_index % num_values;
+        let our_item = cohort_index % cfg.num_values;
         model.add_action(format!("off-{}", cohort_index), Weak, move |s, c| {
             let run = s.total_txns();
             let cohort = &mut s.cohorts[cohort_index];
@@ -83,8 +87,8 @@ fn build_model<'a>(
             }
         });
 
-        let itemset: Vec<String> = (0..num_values).map(|i| format!("item-{}", i)).collect();
-        let our_item = cohort_index % num_values;
+        let itemset: Vec<String> = (0..cfg.num_values).map(|i| format!("item-{}", i)).collect();
+        let our_item = cohort_index % cfg.num_values;
         model.add_action(format!("on-{}", cohort_index), Weak, move |s, _| {
             let run = s.total_txns();
             let cohort = &mut s.cohorts[cohort_index];
@@ -124,64 +128,141 @@ fn build_model<'a>(
         model.add_action(format!("updater-{}", cohort_index), Weak, updater_action(cohort_index, asserter(cohort_index)));
         model.add_action(format!("replicator-{}", cohort_index), Weak, replicator_action(cohort_index, asserter(cohort_index)));
     }
-    model.add_action("certifier".into(), Weak, certifier_action());
-    model.add_action("supervisor".into(), Strong, supervisor_action(num_cohorts * txns_per_cohort));
+    model.add_action("certifier".into(), Weak, certifier_action(cfg.extent));
+    model.add_action("supervisor".into(), Strong, supervisor_action(cfg.num_cohorts * cfg.txns_per_cohort));
     model
 }
 
 #[test]
 fn dfs_roster_1x1() {
-    dfs(&build_model(2, 1, 1, name_of(&dfs_roster_1x1)));
+    dfs(&build_model(RosterCfg {
+        num_values: 2,
+        num_cohorts: 1,
+        txns_per_cohort: 1,
+        extent: 1,
+        name: name_of(&dfs_roster_1x1)
+    }));
 }
 
 #[test]
 fn dfs_roster_1x2() {
-    dfs(&build_model(2, 1, 2, name_of(&dfs_roster_1x2)));
+    dfs(&build_model(RosterCfg {
+        num_values: 2,
+        num_cohorts: 1,
+        txns_per_cohort: 2,
+        extent: 2,
+        name: name_of(&dfs_roster_1x2)
+    }));
 }
 
 #[test]
 #[ignore]
 fn dfs_roster_2x1() {
-    dfs(&build_model(2, 2, 1, name_of(&dfs_roster_2x1)));
+    dfs(&build_model(RosterCfg {
+        num_values: 2,
+        num_cohorts: 2,
+        txns_per_cohort: 1,
+        extent: 2,
+        name: name_of(&dfs_roster_2x1)
+    }));
 }
 
 #[test]
 #[ignore]
 fn dfs_roster_2x2() {
-    dfs(&build_model(2, 2, 2, name_of(&dfs_roster_2x2)));
+    dfs(&build_model(RosterCfg {
+        num_values: 2,
+        num_cohorts: 2,
+        txns_per_cohort: 2,
+        extent: 4,
+        name: name_of(&dfs_roster_2x2)
+    }))
 }
 
 #[test]
 fn sim_roster_1x1() {
-    sim(&build_model(2, 1, 1, name_of(&sim_roster_1x1)), 10);
+    sim(&build_model(RosterCfg {
+        num_values: 2,
+        num_cohorts: 1,
+        txns_per_cohort: 1,
+        extent: 1,
+        name: name_of(&sim_roster_1x1)
+    }), 10);
 }
 
 #[test]
 fn sim_roster_2x1() {
-    sim(&build_model(2, 2, 1, name_of(&sim_roster_2x1)), 20);
+    sim(&build_model(RosterCfg {
+        num_values: 2,
+        num_cohorts: 2,
+        txns_per_cohort: 1,
+        extent: 2,
+        name: name_of(&sim_roster_2x1)
+    }), 20);
 }
 
 #[test]
 fn sim_roster_2x2() {
-    sim(&build_model(2, 2, 2, name_of(&sim_roster_2x2)), 40);
+    sim(&build_model(RosterCfg {
+        num_values: 2,
+        num_cohorts: 2,
+        txns_per_cohort: 2,
+        extent: 4,
+        name: name_of(&sim_roster_2x2)
+    }), 40);
 }
 
 #[test]
 fn sim_roster_3x1() {
-    sim(&build_model(2, 3, 1, name_of(&sim_roster_3x1)), 40);
+    sim(&build_model(RosterCfg {
+        num_values: 2,
+        num_cohorts: 3,
+        txns_per_cohort: 1,
+        extent: 3,
+        name: name_of(&sim_roster_3x1)
+    }), 40);
 }
 
 #[test]
 fn sim_roster_3x2() {
-    sim(&build_model(2, 3, 2, name_of(&sim_roster_3x2)), 80);
+    sim(&build_model(RosterCfg {
+        num_values: 2,
+        num_cohorts: 3,
+        txns_per_cohort: 2,
+        extent: 6,
+        name: name_of(&sim_roster_3x2)
+    }), 80);
 }
 
 #[test]
 fn sim_roster_4x1() {
-    sim(&build_model(2, 4, 1, name_of(&sim_roster_4x1)), 80);
+    sim(&build_model(RosterCfg {
+        num_values: 2,
+        num_cohorts: 4,
+        txns_per_cohort: 1,
+        extent: 4,
+        name: name_of(&sim_roster_4x1)
+    }), 80);
 }
 
 #[test]
-fn sim_roster_4x2() {
-    sim(&build_model(2, 4, 2, name_of(&sim_roster_4x2)), 160);
+fn sim_roster_4x2_1() {
+    sim(&build_model(RosterCfg {
+        num_values: 2,
+        num_cohorts: 4,
+        txns_per_cohort: 2,
+        extent: 1,
+        name: name_of(&sim_roster_4x2_1)
+    }), 160);
+}
+
+#[test]
+fn sim_roster_4x2_8() {
+    sim(&build_model(RosterCfg {
+        num_values: 2,
+        num_cohorts: 4,
+        txns_per_cohort: 2,
+        extent: 8,
+        name: name_of(&sim_roster_4x2_8)
+    }), 160);
 }

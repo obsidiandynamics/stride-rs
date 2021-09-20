@@ -52,6 +52,13 @@ impl<S: Clone> DecisionMessage<S> {
             DecisionMessage::Abort(message) => Some(message)
         }
     }
+
+    pub fn candidate(&self) -> &Candidate {
+        match self {
+            DecisionMessage::Commit(commit) => &commit.candidate,
+            DecisionMessage::Abort(abort) => &abort.candidate
+        }
+    }
 }
 
 #[derive(Debug)]

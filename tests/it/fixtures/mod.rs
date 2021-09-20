@@ -10,14 +10,15 @@ use uuid::Uuid;
 
 use std::convert::{TryFrom, TryInto};
 use std::fmt::Debug;
+use stride::examiner::{Examiner, Outcome};
 use stride::havoc::checker::{CheckResult, Checker};
 use stride::havoc::model::ActionResult::{Blocked, Breached, Joined, Ran};
 use stride::havoc::model::{rand_element, ActionResult, Context, Model};
 use stride::havoc::sim::{Sim, SimResult};
 use stride::havoc::{checker, sim, Sublevel};
-use stride::{AbortMessage, Candidate, CommitMessage, DecisionMessage, Message};
-use stride::examiner::{Examiner, Outcome};
+use stride::suffix::Suffix;
 use stride::Message::Decision;
+use stride::{AbortMessage, Candidate, CommitMessage, DecisionMessage, Message};
 
 #[derive(Debug)]
 pub struct SystemState {
@@ -36,29 +37,27 @@ impl SystemState {
             })
             .collect();
         let certifier = Certifier {
-            examiner: Examiner::new(),
+            suffix: Suffix::default(),
+            examiner: Examiner::default(),
             stream: broker.stream(),
         };
 
-        SystemState {
-            cohorts,
-            certifier,
-        }
+        SystemState { cohorts, certifier }
     }
 
     pub fn total_txns(&self) -> usize {
-        self.certifier.stream.count(|msg| msg.as_candidate().is_some())
+        self.certifier
+            .stream
+            .count(|msg| msg.as_candidate().is_some())
     }
 
     pub fn cohort_txns(&self, cohort_index: usize) -> usize {
-        self.certifier.stream.count(|msg| {
-            match msg {
-                Message::Candidate(candidate) => {
-                    let (pid, _) = deuuid::<usize, usize>(candidate.rec.xid);
-                    pid == cohort_index
-                }
-                Message::Decision(_) => false
+        self.certifier.stream.count(|msg| match msg {
+            Message::Candidate(candidate) => {
+                let (pid, _) = deuuid::<usize, usize>(candidate.rec.xid);
+                pid == cohort_index
             }
+            Message::Decision(_) => false,
         })
     }
 }
@@ -79,7 +78,7 @@ impl CohortState for SystemState {
 pub enum Op {
     Set(i32),
     Add(i32),
-    Mpy(i32)
+    Mpy(i32),
 }
 
 impl Op {
@@ -87,7 +86,7 @@ impl Op {
         match self {
             Op::Set(new) => *new,
             Op::Add(addend) => existing + *addend,
-            Op::Mpy(multiplicand) => existing * *multiplicand
+            Op::Mpy(multiplicand) => existing * *multiplicand,
         }
     }
 }
@@ -103,8 +102,15 @@ impl Statemap {
     }
 
     pub fn map<M>(changes: &[(usize, i32)], mapper: M) -> Self
-        where M: Fn(i32) -> Op {
-        Self::new(changes.iter().map(|&(item, val)| (item, mapper(val))).collect())
+    where
+        M: Fn(i32) -> Op,
+    {
+        Self::new(
+            changes
+                .iter()
+                .map(|&(item, val)| (item, mapper(val)))
+                .collect(),
+        )
     }
 }
 
@@ -116,6 +122,7 @@ pub struct Cohort {
 
 #[derive(Debug)]
 pub struct Certifier {
+    pub suffix: Suffix,
     pub examiner: Examiner,
     pub stream: Stream<Message<Statemap>>,
 }
@@ -239,8 +246,8 @@ impl<M> Stream<M> {
     }
 
     pub fn count<P>(&self, predicate: P) -> usize
-        where
-            P: Fn(&M) -> bool,
+    where
+        P: Fn(&M) -> bool,
     {
         let internals = &self.internals.borrow();
         let messages = &internals.messages;
@@ -250,7 +257,6 @@ impl<M> Stream<M> {
             .filter(|&(_, m)| predicate(m.deref()))
             .count()
     }
-
 
     pub fn offset(&self) -> usize {
         self.offset
@@ -282,10 +288,14 @@ where
 
 #[derive(Debug)]
 pub enum Bimorphic<U, V> {
-    A(U), B(V)
+    A(U),
+    B(V),
 }
 
-pub fn try_uuidify<P, R>(pid: P, run: R) -> Result<Uuid, Bimorphic<<P as TryInto<u64>>::Error, <R as TryInto<u64>>::Error>>
+pub fn try_uuidify<P, R>(
+    pid: P,
+    run: R,
+) -> Result<Uuid, Bimorphic<<P as TryInto<u64>>::Error, <R as TryInto<u64>>::Error>>
 where
     P: TryInto<u64>,
     R: TryInto<u64>,
@@ -305,7 +315,9 @@ where
     try_deuuid(uuid).unwrap()
 }
 
-pub fn try_deuuid<P, R>(uuid: Uuid) -> Result<(P, R), Bimorphic<<P as TryFrom<u64>>::Error, <R as TryFrom<u64>>::Error>>
+pub fn try_deuuid<P, R>(
+    uuid: Uuid,
+) -> Result<(P, R), Bimorphic<<P as TryFrom<u64>>::Error, <R as TryFrom<u64>>::Error>>
 where
     P: TryFrom<u64>,
     R: TryFrom<u64>,
@@ -435,20 +447,16 @@ where
     move |s, c| {
         let installable_commits = {
             let cohort = &mut s.cohorts()[cohort_index];
-            cohort.stream.find(|message| {
-                match message {
-                    Message::Candidate(_) => false,
-                    Message::Decision(decision) => {
-                        match decision {
-                            DecisionMessage::Commit(commit) => cohort.replica.can_install_ooo(
-                                &commit.statemap,
-                                commit.safepoint,
-                                commit.candidate.ver,
-                            ),
-                            DecisionMessage::Abort(_) => false,
-                        }
-                    }
-                }
+            cohort.stream.find(|message| match message {
+                Message::Candidate(_) => false,
+                Message::Decision(decision) => match decision {
+                    DecisionMessage::Commit(commit) => cohort.replica.can_install_ooo(
+                        &commit.statemap,
+                        commit.safepoint,
+                        commit.candidate.ver,
+                    ),
+                    DecisionMessage::Abort(_) => false,
+                },
             })
         };
 
@@ -491,10 +499,10 @@ where
                     } else {
                         Blocked
                     }
-                },
+                }
                 Some((_, message)) => {
                     match message.deref() {
-                        Message::Candidate(_) => {},
+                        Message::Candidate(_) => {}
                         Message::Decision(decision) => {
                             at_least_one_decision_consumed = true;
                             match decision {
@@ -523,36 +531,65 @@ where
     }
 }
 
-pub fn certifier_action<S>() -> impl Fn(&mut S, &mut dyn Context) -> ActionResult
+pub fn certifier_action<S>(extent: usize) -> impl Fn(&mut S, &mut dyn Context) -> ActionResult
 where
     S: CertifierState,
 {
-    |s, _| {
+    move |s, _| {
         let certifier = s.certifier();
         match certifier.stream.consume() {
             None => Blocked,
             Some((offset, message)) => {
                 match message.deref() {
                     Message::Candidate(candidate_message) => {
+                        let result = certifier.suffix.insert(
+                            candidate_message.rec.readset.clone(),
+                            candidate_message.rec.writeset.clone(),
+                            offset as u64,
+                        );
+                        if let Err(error) = result {
+                            return Breached(format!("suffix insertion error: {:?}", error));
+                        }
+
                         let candidate = Candidate {
                             rec: candidate_message.rec.clone(),
                             ver: offset as u64,
                         };
                         let outcome = certifier.examiner.assess(candidate.clone());
-                        log::trace!("Certified {:?} {:?} with {:?}", candidate, &candidate_message.statemap, outcome);
+                        log::trace!(
+                            "Certified {:?} {:?} with {:?}",
+                            candidate,
+                            &candidate_message.statemap,
+                            outcome
+                        );
                         let decision_message = match outcome {
-                            Outcome::Commit(safepoint, _) => DecisionMessage::Commit(CommitMessage {
-                                candidate,
-                                safepoint,
-                                statemap: candidate_message.statemap.clone(),
-                            }),
+                            Outcome::Commit(safepoint, _) => {
+                                DecisionMessage::Commit(CommitMessage {
+                                    candidate,
+                                    safepoint,
+                                    statemap: candidate_message.statemap.clone(),
+                                })
+                            }
                             Outcome::Abort(reason, _) => {
                                 DecisionMessage::Abort(AbortMessage { candidate, reason })
                             }
                         };
-                        certifier.stream.produce(Rc::new(Decision(decision_message)));
+                        certifier
+                            .stream
+                            .produce(Rc::new(Decision(decision_message)));
                     }
-                    Message::Decision(_) => {}
+                    Message::Decision(decision) => {
+                        let result = certifier.suffix.decide(decision.candidate().ver);
+                        if let Err(error) = result {
+                            return Breached(format!("suffix decision error: {:?}", error));
+                        }
+                        let truncated = certifier.suffix.truncate(extent, extent);
+                        if let Some(truncated_entries) = truncated {
+                            for truncated_entry in truncated_entries {
+                                certifier.examiner.discard(truncated_entry);
+                            }
+                        }
+                    }
                 }
                 Ran
             }

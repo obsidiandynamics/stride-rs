@@ -49,16 +49,21 @@ fn asserter(cohort_index: usize) -> impl Fn(&[Cohort]) -> Box<dyn Fn(&[Cohort]) 
     }
 }
 
-fn build_model<'a>(
+struct MonotonicCfg<'a> {
     num_cohorts: usize,
     txns_per_cohort: usize,
-    name: &str,
-) -> Model<'a, SystemState> {
+    extent: usize,
+    name: &'a str
+}
+
+fn build_model(cfg: MonotonicCfg) -> Model<SystemState> {
     // values[0] is the monotonic counter; values[1] is its copy
     let values= vec![0, 0];
-    let mut model = Model::new(move || SystemState::new(num_cohorts, &values)).with_name(name.into());
+    let num_cohorts = cfg.num_cohorts;
+    let mut model = Model::new(move || SystemState::new(num_cohorts, &values)).with_name(cfg.name.into());
 
-    for cohort_index in 0..num_cohorts {
+    let txns_per_cohort = cfg.txns_per_cohort;
+    for cohort_index in 0..cfg.num_cohorts {
         let itemset: Vec<String> = (0..2).map(|i| format!("item-{}", i)).collect();
         model.add_action(format!("counter-{}", cohort_index), Weak, move |s, _| {
             let run = s.cohort_txns(cohort_index);
@@ -91,6 +96,7 @@ fn build_model<'a>(
             }
         });
         let itemset: Vec<String> = (0..2).map(|i| format!("item-{}", i)).collect();
+        let txns_per_cohort = cfg.txns_per_cohort;
         model.add_action(format!("copier-{}", cohort_index), Weak, move |s, _| {
             let run = s.cohort_txns(cohort_index);
             if run == txns_per_cohort {
@@ -124,64 +130,119 @@ fn build_model<'a>(
         model.add_action(format!("updater-{}", cohort_index), Weak, updater_action(cohort_index, asserter(cohort_index)));
         model.add_action(format!("replicator-{}", cohort_index), Weak, replicator_action(cohort_index, asserter(cohort_index)));
     }
-    model.add_action("certifier".into(), Weak, certifier_action());
-    model.add_action("supervisor".into(), Strong, supervisor_action(num_cohorts * txns_per_cohort));
+    model.add_action("certifier".into(), Weak, certifier_action(cfg.extent));
+    model.add_action("supervisor".into(), Strong, supervisor_action(cfg.num_cohorts * cfg.txns_per_cohort));
     model
 }
 
 #[test]
 fn dfs_monotonic_1x1() {
-    dfs(&build_model(1, 1, name_of(&dfs_monotonic_1x1)));
+    dfs(&build_model(MonotonicCfg {
+        num_cohorts: 1,
+        txns_per_cohort: 1,
+        extent: 1,
+        name: name_of(&dfs_monotonic_1x1)
+    }));
 }
 
 #[test]
 fn dfs_monotonic_1x2() {
-    dfs(&build_model(1, 2, name_of(&dfs_monotonic_1x2)));
+    dfs(&build_model(MonotonicCfg {
+        num_cohorts: 1,
+        txns_per_cohort: 2,
+        extent: 2,
+        name: name_of(&dfs_monotonic_1x2)
+    }));
 }
 
 #[test]
 #[ignore]
 fn dfs_monotonic_2x1() {
-    dfs(&build_model(2, 1, name_of(&dfs_monotonic_2x1)));
+    dfs(&build_model(MonotonicCfg {
+        num_cohorts: 2,
+        txns_per_cohort: 1,
+        extent: 2,
+        name: name_of(&dfs_monotonic_2x1)
+    }));
 }
 
 #[test]
 #[ignore]
 fn dfs_monotonic_2x2() {
-    dfs(&build_model(2, 2, name_of(&dfs_monotonic_2x2)));
+    dfs(&build_model(MonotonicCfg {
+        num_cohorts: 2,
+        txns_per_cohort: 2,
+        extent: 4,
+        name: name_of(&dfs_monotonic_2x2)
+    }));
 }
 
 #[test]
 fn sim_monotonic_1x1() {
-    sim(&build_model(1, 1, name_of(&sim_monotonic_1x1)), 10);
+    sim(&build_model(MonotonicCfg {
+        num_cohorts: 1,
+        txns_per_cohort: 1,
+        extent: 1,
+        name: name_of(&sim_monotonic_1x1)
+    }), 10);
 }
 
 #[test]
 fn sim_monotonic_2x1() {
-    sim(&build_model(2, 1, name_of(&sim_monotonic_2x1)), 20);
+    sim(&build_model(MonotonicCfg {
+        num_cohorts: 2,
+        txns_per_cohort: 1,
+        extent: 2,
+        name: name_of(&sim_monotonic_2x1)
+    }), 20);
 }
 
 #[test]
 fn sim_monotonic_2x2() {
-    sim(&build_model(2, 2, name_of(&sim_monotonic_2x2)), 40);
+    sim(&build_model(MonotonicCfg {
+        num_cohorts: 2,
+        txns_per_cohort: 2,
+        extent: 4,
+        name: name_of(&sim_monotonic_2x2)
+    }), 40);
 }
 
 #[test]
 fn sim_monotonic_3x1() {
-    sim(&build_model(3, 1, name_of(&sim_monotonic_3x1)), 40);
+    sim(&build_model(MonotonicCfg {
+        num_cohorts: 3,
+        txns_per_cohort: 1,
+        extent: 3,
+        name: name_of(&sim_monotonic_3x1)
+    }), 40);
 }
 
 #[test]
 fn sim_monotonic_3x2() {
-    sim(&build_model(3, 2, name_of(&sim_monotonic_3x2)), 80);
+    sim(&build_model(MonotonicCfg {
+        num_cohorts: 3,
+        txns_per_cohort: 2,
+        extent: 6,
+        name: name_of(&sim_monotonic_3x2)
+    }), 80);
 }
 
 #[test]
 fn sim_monotonic_4x1() {
-    sim(&build_model(4, 1, name_of(&sim_monotonic_4x1)), 80);
+    sim(&build_model(MonotonicCfg {
+        num_cohorts: 4,
+        txns_per_cohort: 1,
+        extent: 4,
+        name: name_of(&sim_monotonic_4x1)
+    }), 80);
 }
 
 #[test]
 fn sim_monotonic_4x2() {
-    sim(&build_model(4, 2, name_of(&sim_monotonic_4x2)), 160);
+    sim(&build_model(MonotonicCfg {
+        num_cohorts: 4,
+        txns_per_cohort: 2,
+        extent: 8,
+        name: name_of(&sim_monotonic_4x2)
+    }), 160);
 }

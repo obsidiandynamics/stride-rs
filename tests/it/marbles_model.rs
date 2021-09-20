@@ -24,18 +24,23 @@ fn asserter(num_values: usize, cohort_index: usize) -> impl Fn(&[Cohort]) -> Box
     }
 }
 
-fn build_model<'a>(
+struct MarblesCfg<'a> {
     num_values: usize,
     num_cohorts: usize,
     txns_per_cohort: usize,
-    name: &str,
-) -> Model<'a, SystemState> {
-    // initial values are alternating 0s and 1s
-    let values: Vec<i32> = (0..num_values).map(|i| (i % 2) as i32).collect();
-    let mut model = Model::new(move || SystemState::new(num_cohorts, &values)).with_name(name.into());
+    extent: usize,
+    name: &'a str,
+}
 
-    for cohort_index in 0..num_cohorts {
-        let itemset: Vec<String> = (0..num_values).map(|i| format!("item-{}", i)).collect();
+fn build_model(cfg: MarblesCfg) -> Model<SystemState> {
+    // initial values are alternating 0s and 1s
+    let values: Vec<i32> = (0..cfg.num_values).map(|i| (i % 2) as i32).collect();
+    let num_cohorts = cfg.num_cohorts;
+    let mut model = Model::new(move || SystemState::new(num_cohorts, &values)).with_name(cfg.name.into());
+
+    let txns_per_cohort = cfg.txns_per_cohort;
+    for cohort_index in 0..cfg.num_cohorts {
+        let itemset: Vec<String> = (0..cfg.num_values).map(|i| format!("item-{}", i)).collect();
         // each cohort is assigned a specific 'to' color
         let target_color = (cohort_index % 2) as i32;
         model.add_action(format!("initiator-{}", cohort_index), Weak, move |s, _| {
@@ -79,67 +84,144 @@ fn build_model<'a>(
                 Ran
             }
         });
-        model.add_action(format!("updater-{}", cohort_index), Weak, updater_action(cohort_index, asserter(num_values, cohort_index)));
-        model.add_action(format!("replicator-{}", cohort_index), Weak, replicator_action(cohort_index, asserter(num_values, cohort_index)));
+        model.add_action(format!("updater-{}", cohort_index), Weak, updater_action(cohort_index, asserter(cfg.num_values, cohort_index)));
+        model.add_action(format!("replicator-{}", cohort_index), Weak, replicator_action(cohort_index, asserter(cfg.num_values, cohort_index)));
     }
-    model.add_action("certifier".into(), Weak, certifier_action());
-    model.add_action("supervisor".into(), Strong, supervisor_action(num_cohorts * txns_per_cohort));
+    model.add_action("certifier".into(), Weak, certifier_action(cfg.extent));
+    model.add_action("supervisor".into(), Strong, supervisor_action(cfg.num_cohorts * cfg.txns_per_cohort));
     model
 }
 
 #[test]
 fn dfs_marbles_1x1() {
-    dfs(&build_model(2, 1, 1, name_of(&dfs_marbles_1x1)));
+    dfs(&build_model(MarblesCfg {
+        num_values: 2,
+        num_cohorts: 1,
+        txns_per_cohort: 1,
+        extent: 1,
+        name: name_of(&dfs_marbles_1x1)
+    }));
 }
 
 #[test]
 fn dfs_marbles_1x2() {
-    dfs(&build_model(2, 1, 2, name_of(&dfs_marbles_1x2)));
+    dfs(&build_model(MarblesCfg {
+        num_values: 2,
+        num_cohorts: 1,
+        txns_per_cohort: 2,
+        extent: 2,
+        name: name_of(&dfs_marbles_1x2)
+    }));
 }
 
 #[test]
 #[ignore]
 fn dfs_marbles_2x1() {
-    dfs(&build_model(2, 2, 1, name_of(&dfs_marbles_2x1)));
+    dfs(&build_model(MarblesCfg {
+        num_values: 2,
+        num_cohorts: 2,
+        txns_per_cohort: 1,
+        extent: 2,
+        name: name_of(&dfs_marbles_2x1)
+    }));
 }
 
 #[test]
 #[ignore]
 fn dfs_marbles_2x2() {
-    dfs(&build_model(2, 2, 2, name_of(&dfs_marbles_2x2)));
+    dfs(&build_model(MarblesCfg {
+        num_values: 2,
+        num_cohorts: 2,
+        txns_per_cohort: 2,
+        extent: 4,
+        name: name_of(&dfs_marbles_2x2)
+    }));
 }
 
 #[test]
 fn sim_marbles_1x1() {
-    sim(&build_model(2, 1, 1, name_of(&sim_marbles_1x1)), 10);
+    sim(&build_model(MarblesCfg {
+        num_values: 2,
+        num_cohorts: 1,
+        txns_per_cohort: 1,
+        extent: 1,
+        name: name_of(&sim_marbles_1x1)
+    }), 10);
 }
 
 #[test]
 fn sim_marbles_2x1() {
-    sim(&build_model(2, 2, 1, name_of(&sim_marbles_2x1)), 20);
+    sim(&build_model(MarblesCfg {
+        num_values: 2,
+        num_cohorts: 2,
+        txns_per_cohort: 1,
+        extent: 2,
+        name: name_of(&sim_marbles_2x1)
+    }), 20);
 }
 
 #[test]
 fn sim_marbles_2x2() {
-    sim(&build_model(2, 2, 2, name_of(&sim_marbles_2x2)), 40);
+    sim(&build_model(MarblesCfg {
+        num_values: 2,
+        num_cohorts: 2,
+        txns_per_cohort: 2,
+        extent: 4,
+        name: name_of(&sim_marbles_2x2)
+    }), 40);
 }
 
 #[test]
 fn sim_marbles_3x1() {
-    sim(&build_model(2, 3, 1, name_of(&sim_marbles_3x1)), 40);
+    sim(&build_model(MarblesCfg {
+        num_values: 2,
+        num_cohorts: 3,
+        txns_per_cohort: 1,
+        extent: 3,
+        name: name_of(&sim_marbles_3x1)
+    }), 40);
 }
 
 #[test]
 fn sim_marbles_3x2() {
-    sim(&build_model(2, 3, 2, name_of(&sim_marbles_3x2)), 80);
+    sim(&build_model(MarblesCfg {
+        num_values: 2,
+        num_cohorts: 3,
+        txns_per_cohort: 2,
+        extent: 6,
+        name: name_of(&sim_marbles_3x2)
+    }), 80);
 }
 
 #[test]
 fn sim_marbles_4x1() {
-    sim(&build_model(2, 4, 1, name_of(&sim_marbles_4x1)), 80);
+    sim(&build_model(MarblesCfg {
+        num_values: 2,
+        num_cohorts: 4,
+        txns_per_cohort: 1,
+        extent: 4,
+        name: name_of(&sim_marbles_4x1)
+    }), 80);
 }
 
 #[test]
-fn sim_marbles_4x2() {
-    sim(&build_model(2, 4, 2, name_of(&sim_marbles_4x2)), 160);
+fn sim_marbles_4x2_1() {
+    sim(&build_model(MarblesCfg {
+        num_values: 2,
+        num_cohorts: 4,
+        txns_per_cohort: 2,
+        extent: 1,
+        name: name_of(&sim_marbles_4x2_1),
+    }), 160);
+}
+
+#[test]
+fn sim_marbles_4x2_8() {
+    sim(&build_model(MarblesCfg {
+        num_values: 2,
+        num_cohorts: 4,
+        txns_per_cohort: 2,
+        extent: 8,
+        name: name_of(&sim_marbles_4x2_8),
+    }), 160);
 }

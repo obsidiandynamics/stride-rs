@@ -138,16 +138,6 @@ impl Examiner {
         Self::remove_items(&mut self.reads, entry.readset, entry.ver);
         Self::remove_items(&mut self.writes, entry.writeset, entry.ver);
         self.base = entry.ver + 1;
-        // for entry_read in entry.readset {
-        //     match self.reads.entry(entry_read) {
-        //         Entry::Occupied(existing) => {
-        //             if *existing.get() == entry.ver {
-        //                 existing.remove();
-        //             }
-        //         }
-        //         Entry::Vacant(_) => {}
-        //     }
-        // }
     }
 
     pub fn base(&self) -> Option<u64> {
@@ -171,6 +161,12 @@ impl Examiner {
                 Entry::Vacant(_) => {}
             }
         }
+    }
+}
+
+impl Default for Examiner {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
