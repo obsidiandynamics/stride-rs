@@ -5,12 +5,12 @@ pub mod havoc;
 pub mod suffix;
 
 #[derive(Debug)]
-pub enum Message<S: Clone> {
+pub enum Message<S> {
     Candidate(CandidateMessage<S>),
     Decision(DecisionMessage<S>),
 }
 
-impl <S: Clone> Message<S> {
+impl <S> Message<S> {
     pub fn as_candidate(&self) -> Option<&CandidateMessage<S>> {
         match self {
             Message::Candidate(candidate) => Some(candidate),
@@ -27,18 +27,18 @@ impl <S: Clone> Message<S> {
 }
 
 #[derive(Debug)]
-pub struct CandidateMessage<S: Clone> {
+pub struct CandidateMessage<S> {
     pub rec: Record,
     pub statemap: S,
 }
 
 #[derive(Debug)]
-pub enum DecisionMessage<S: Clone> {
+pub enum DecisionMessage<S> {
     Commit(CommitMessage<S>),
     Abort(AbortMessage)
 }
 
-impl<S: Clone> DecisionMessage<S> {
+impl<S> DecisionMessage<S> {
     pub fn as_commit(&self) -> Option<&CommitMessage<S>> {
         match self {
             DecisionMessage::Commit(message) => Some(message),
@@ -62,7 +62,7 @@ impl<S: Clone> DecisionMessage<S> {
 }
 
 #[derive(Debug)]
-pub struct CommitMessage<S: Clone> {
+pub struct CommitMessage<S> {
     pub candidate: Candidate,
     pub safepoint: u64,
     pub statemap: S
