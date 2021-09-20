@@ -1,4 +1,4 @@
-use uuid::Uuid;
+use crate::examiner::{Candidate, AbortReason, Record};
 
 pub mod examiner;
 pub mod havoc;
@@ -72,40 +72,6 @@ pub struct CommitMessage<S: Clone> {
 pub struct AbortMessage {
     pub candidate: Candidate,
     pub reason: AbortReason
-}
-
-#[derive(Debug, Clone)]
-pub struct Candidate {
-    pub rec: Record,
-    pub ver: u64,
-}
-
-#[derive(Debug, Clone)]
-pub struct Record {
-    pub xid: Uuid,
-    pub readset: Vec<String>,
-    pub writeset: Vec<String>,
-    pub readvers: Vec<u64>,
-    pub snapshot: u64,
-}
-
-impl Record {
-    pub fn compress(cpt_readvers: Vec<u64>, cpt_snapshot: u64) -> (Vec<u64>, u64) {
-        if cpt_readvers.is_empty() {
-            (cpt_readvers, cpt_snapshot)
-        } else {
-            let smallest_readver = *cpt_readvers.iter().min().unwrap();
-            let snapshot = std::cmp::max(cpt_snapshot, smallest_readver);
-            let readvers = cpt_readvers.into_iter().filter(|&v| v > snapshot).collect();
-            (readvers, snapshot)
-        }
-    }
-}
-
-#[derive(PartialEq, Debug, Clone)]
-pub enum AbortReason {
-    Antidependency(u64),
-    Staleness,
 }
 
 #[cfg(test)]

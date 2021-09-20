@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use std::convert::{TryFrom, TryInto};
 use std::fmt::Debug;
-use stride::examiner::{Examiner, Outcome, Discord};
+use stride::examiner::{Examiner, Outcome, Discord, Candidate};
 use stride::havoc::checker::{CheckResult, Checker};
 use stride::havoc::model::ActionResult::{Blocked, Breached, Joined, Ran};
 use stride::havoc::model::{rand_element, ActionResult, Context, Model};
@@ -18,7 +18,7 @@ use stride::havoc::sim::{Sim, SimResult};
 use stride::havoc::{checker, sim, Sublevel};
 use stride::suffix::{Suffix};
 use stride::Message::Decision;
-use stride::{AbortMessage, Candidate, CommitMessage, DecisionMessage, Message};
+use stride::{AbortMessage, CommitMessage, DecisionMessage, Message};
 use rustc_hash::FxHashMap;
 use std::collections::hash_map::Entry;
 use crate::fixtures::XdbAssignmentError::Conflict;

@@ -1,11 +1,10 @@
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 
 use stride::examiner::Discord::Permissive;
-use stride::examiner::Examiner;
+use stride::examiner::{Examiner, Record, Candidate};
 use stride::examiner::Outcome::Commit;
 use stride::suffix::DecideResult::Decided;
 use stride::suffix::{Suffix};
-use stride::{Candidate, Record};
 use uuid::Uuid;
 
 fn criterion_benchmark(c: &mut Criterion) {

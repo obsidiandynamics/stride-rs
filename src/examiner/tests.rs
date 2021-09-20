@@ -1,10 +1,9 @@
-use crate::examiner::Examiner;
-use crate::{Candidate, Record};
+use crate::examiner::{Examiner, Record, Candidate};
 use crate::examiner::Discord::{Permissive, Assertive};
 use crate::examiner::Outcome::{Commit, Abort};
 use uuid::Uuid;
-use crate::AbortReason::{Staleness, Antidependency};
 use crate::suffix::TruncatedEntry;
+use crate::examiner::AbortReason::{Staleness, Antidependency};
 
 impl Examiner {
     fn knows(&self, candidate: &Candidate) -> bool {
@@ -439,4 +438,11 @@ fn assert_knows(examiner: &Examiner, candidate: &Candidate) {
             }
         }
     }
+}
+
+#[test]
+fn compress() {
+    assert_eq!((vec![], 10), Record::compress(vec![3, 6, 9], 10));
+    assert_eq!((vec![6, 9], 4), Record::compress(vec![3, 6, 9], 4));
+    assert_eq!((vec![6, 9], 3), Record::compress(vec![3, 6, 9], 1));
 }

@@ -2,8 +2,7 @@ use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 use uuid::Uuid;
 
 use stride::examiner::Outcome::Commit;
-use stride::examiner::{Discord, Examiner};
-use stride::{Candidate, Record};
+use stride::examiner::{Discord, Examiner, Record, Candidate};
 
 fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function("examiner_learn", |b| {

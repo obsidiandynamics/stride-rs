@@ -1,10 +1,10 @@
 use rustc_hash::FxHashMap;
-use crate::{AbortReason, Candidate};
 use crate::examiner::Discord::{Assertive, Permissive};
 use crate::examiner::Outcome::{Commit, Abort};
-use crate::AbortReason::{Antidependency, Staleness};
 use std::collections::hash_map::Entry;
 use crate::suffix::TruncatedEntry;
+use uuid::Uuid;
+use crate::examiner::AbortReason::{Antidependency, Staleness};
 
 #[derive(Debug)]
 pub struct Examiner {
@@ -60,6 +60,40 @@ impl Outcome {
             Abort(_, discord) => discord
         }
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct Candidate {
+    pub rec: Record,
+    pub ver: u64,
+}
+
+#[derive(Debug, Clone)]
+pub struct Record {
+    pub xid: Uuid,
+    pub readset: Vec<String>,
+    pub writeset: Vec<String>,
+    pub readvers: Vec<u64>,
+    pub snapshot: u64,
+}
+
+impl Record {
+    pub fn compress(cpt_readvers: Vec<u64>, cpt_snapshot: u64) -> (Vec<u64>, u64) {
+        if cpt_readvers.is_empty() {
+            (cpt_readvers, cpt_snapshot)
+        } else {
+            let smallest_readver = *cpt_readvers.iter().min().unwrap();
+            let snapshot = std::cmp::max(cpt_snapshot, smallest_readver);
+            let readvers = cpt_readvers.into_iter().filter(|&v| v > snapshot).collect();
+            (readvers, snapshot)
+        }
+    }
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub enum AbortReason {
+    Antidependency(u64),
+    Staleness,
 }
 
 impl Examiner {

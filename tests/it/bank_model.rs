@@ -6,6 +6,7 @@ use stride::havoc::model::Retention::{Strong, Weak};
 use stride::havoc::model::{name_of, rand_element, Model};
 use stride::*;
 use Message::Candidate;
+use stride::examiner::Record;
 
 fn asserter(
     values: &[i32],

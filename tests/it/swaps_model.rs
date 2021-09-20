@@ -7,6 +7,7 @@ use stride::havoc::model::Retention::{Strong, Weak};
 
 use super::fixtures::*;
 use Message::Candidate;
+use stride::examiner::Record;
 
 fn asserter(values: &[i32], cohort_index: usize) -> impl Fn(&[Cohort]) -> Box<dyn Fn(&[Cohort]) -> Option<String>> {
     let expected_product: i32 = values.iter().product();

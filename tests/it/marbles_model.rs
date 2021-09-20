@@ -6,6 +6,7 @@ use stride::havoc::model::Retention::{Strong, Weak};
 use stride::havoc::model::{name_of, Model};
 use stride::*;
 use Message::Candidate;
+use stride::examiner::Record;
 
 fn asserter(num_values: usize, cohort_index: usize) -> impl Fn(&[Cohort]) -> Box<dyn Fn(&[Cohort]) -> Option<String>> {
     move |_| {

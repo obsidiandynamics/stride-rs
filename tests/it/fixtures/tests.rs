@@ -7,8 +7,8 @@ use std::str::FromStr;
 use uuid::Uuid;
 use stride::examiner::Discord::{Assertive, Permissive};
 use stride::examiner::Outcome::{Commit, Abort};
-use stride::AbortReason::Staleness;
 use crate::fixtures::XdbAssignmentError::Conflict;
+use stride::examiner::AbortReason::Staleness;
 
 #[test]
 fn replica_install_items() {
