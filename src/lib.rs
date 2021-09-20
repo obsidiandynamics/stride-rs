@@ -102,7 +102,7 @@ impl Record {
     }
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub enum AbortReason {
     Antidependency(u64),
     Staleness,

@@ -13,16 +13,53 @@ pub struct Examiner {
     base: u64,
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
+pub enum Discord {
+    Permissive,
+    Assertive,
+}
+
+#[derive(PartialEq, Debug, Clone)]
 pub enum Outcome {
     Commit(u64, Discord),
     Abort(AbortReason, Discord),
 }
 
-#[derive(PartialEq, Debug)]
-pub enum Discord {
-    Permissive,
-    Assertive,
+impl Outcome {
+    // pub fn as_commit(&self) -> Option<(u64, &Discord)> {
+    //     match self {
+    //         Commit(safepoint, discord) => Some((*safepoint, discord)),
+    //         Abort(_, _) => None
+    //     }
+    // }
+
+    pub fn is_commit(&self) -> bool {
+        match self {
+            Commit(_, _) => true,
+            Abort(_, _) => false
+        }
+    }
+
+    // pub fn as_abort(&self) -> Option<(&AbortReason, &Discord)> {
+    //     match self {
+    //         Commit(_, _) => None,
+    //         Abort(reason, discord) => Some((reason, discord))
+    //     }
+    // }
+
+    pub fn is_abort(&self) -> bool {
+        match self {
+            Commit(_, _) => false,
+            Abort(_, _) => true
+        }
+    }
+
+    pub fn discord(&self) -> &Discord {
+        match self {
+            Commit(_, discord) => discord,
+            Abort(_, discord) => discord
+        }
+    }
 }
 
 impl Examiner {

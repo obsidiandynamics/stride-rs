@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use std::convert::{TryFrom, TryInto};
 use std::fmt::Debug;
-use stride::examiner::{Examiner, Outcome};
+use stride::examiner::{Examiner, Outcome, Discord};
 use stride::havoc::checker::{CheckResult, Checker};
 use stride::havoc::model::ActionResult::{Blocked, Breached, Joined, Ran};
 use stride::havoc::model::{rand_element, ActionResult, Context, Model};
@@ -19,6 +19,9 @@ use stride::havoc::{checker, sim, Sublevel};
 use stride::suffix::{Suffix};
 use stride::Message::Decision;
 use stride::{AbortMessage, Candidate, CommitMessage, DecisionMessage, Message};
+use rustc_hash::FxHashMap;
+use std::collections::hash_map::Entry;
+use crate::fixtures::XdbAssignmentError::Conflict;
 
 #[derive(Debug)]
 pub struct SystemState {
@@ -172,6 +175,41 @@ impl Replica {
         if ver > self.ver {
             self.install_items(statemap, ver);
             self.ver = ver;
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct Xdb {
+    pub txns: FxHashMap<Uuid, Outcome>
+}
+
+#[derive(Debug, PartialEq)]
+pub enum XdbAssignmentError {
+    Conflict { existing: Outcome, new: Outcome }
+}
+
+impl Xdb {
+    pub fn new() -> Self {
+        Self {
+            txns: FxHashMap::default()
+        }
+    }
+
+    pub fn assign(&mut self, xid: Uuid, outcome: &Outcome) -> Result<Outcome, XdbAssignmentError> {
+        match self.txns.entry(xid) {
+            Entry::Occupied(entry) => {
+                let existing = entry.get();
+                if *outcome.discord() == Discord::Assertive &&
+                    (existing.is_abort() && outcome.is_commit() || existing.is_commit() && outcome.is_abort()) {
+                    return Err(Conflict { existing: existing.clone(), new: outcome.clone() })
+                }
+                Ok(existing.clone())
+            }
+            Entry::Vacant(entry) => {
+                entry.insert(outcome.clone());
+                Ok(outcome.clone())
+            }
         }
     }
 }
