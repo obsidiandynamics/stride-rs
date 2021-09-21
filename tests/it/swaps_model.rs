@@ -217,25 +217,25 @@ fn sim_swaps_4x1() {
 }
 
 #[test]
-fn sim_swaps_4x2_1() {
+fn sim_swaps_4x2_2x1() {
     sim(&build_model(SwapsCfg {
         values: &[101, 103, 107, 111],
         combos: &[(0, 1), (1, 2), (2, 3)],
         txns_per_cohort: 2,
-        num_certifiers: 1,
+        num_certifiers: 2,
         extent: 1,
-        name: name_of(&sim_swaps_4x2_1)
+        name: name_of(&sim_swaps_4x2_2x1)
     }), 160);
 }
 
 #[test]
-fn sim_swaps_4x2_8() {
+fn sim_swaps_4x2_2x8() {
     sim(&build_model(SwapsCfg {
         values: &[101, 103, 107, 111],
         combos: &[(0, 1), (1, 2), (2, 3)],
         txns_per_cohort: 2,
-        num_certifiers: 1,
+        num_certifiers: 2,
         extent: 8,
-        name: name_of(&sim_swaps_4x2_8)
+        name: name_of(&sim_swaps_4x2_2x8)
     }), 160);
 }

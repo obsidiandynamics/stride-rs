@@ -1,5 +1,7 @@
 use std::cell::RefCell;
+use std::convert::{TryFrom, TryInto};
 use std::env;
+use std::fmt::Debug;
 use std::ops::{Deref, Div};
 use std::rc::Rc;
 use std::str::FromStr;
@@ -8,17 +10,18 @@ use std::time::{Duration, SystemTime};
 use rand::RngCore;
 use uuid::Uuid;
 
-use std::convert::{TryFrom, TryInto};
-use std::fmt::Debug;
-use stride::examiner::{Examiner, Outcome, Candidate};
-use stride::havoc::checker::{CheckResult, Checker};
-use stride::havoc::model::ActionResult::{Blocked, Breached, Joined, Ran};
-use stride::havoc::model::{rand_element, ActionResult, Context, Model};
-use stride::havoc::sim::{Sim, SimResult};
-use stride::havoc::{checker, sim, Sublevel};
-use stride::suffix::{Suffix};
-use stride::MessageKind::DecisionMessage;
 use stride::{AbortData, CommitData, DecisionMessageKind, MessageKind};
+use stride::examiner::{Candidate, Examiner, Outcome};
+use stride::havoc::{checker, sim, Sublevel};
+use stride::havoc::checker::{Checker, CheckResult};
+use stride::havoc::model::{ActionResult, Context, Model, rand_element};
+use stride::havoc::model::ActionResult::{Blocked, Breached, Joined, Ran};
+use stride::havoc::sim::{Sim, SimResult};
+use stride::MessageKind::DecisionMessage;
+use stride::suffix::Suffix;
+
+use crate::fixtures::xdb::Xdb;
+use crate::fixtures::xdb::Redaction::{Existing, New};
 
 mod xdb;
 
@@ -26,6 +29,7 @@ mod xdb;
 pub struct SystemState {
     pub cohorts: Vec<Cohort>,
     pub certifiers: Vec<Certifier>,
+    pub xdb: Xdb,
 }
 
 impl SystemState {
@@ -45,7 +49,7 @@ impl SystemState {
             })
             .collect();
 
-        SystemState { cohorts, certifiers }
+        SystemState { cohorts, certifiers, xdb: Xdb::default() }
     }
 
     pub fn total_txns(&self) -> usize {
@@ -74,6 +78,12 @@ impl CertifierState for SystemState {
 impl CohortState for SystemState {
     fn cohorts(&mut self) -> &mut [Cohort] {
         &mut self.cohorts
+    }
+}
+
+impl XdbState for SystemState {
+    fn xdb(&mut self) -> &mut Xdb {
+        &mut self.xdb
     }
 }
 
@@ -439,6 +449,10 @@ pub trait CertifierState {
     fn certifiers(&mut self) -> &mut [Certifier];
 }
 
+pub trait XdbState {
+    fn xdb(&mut self) -> &mut Xdb;
+}
+
 pub fn updater_action<S, A>(
     cohort_index: usize,
     asserter: A,
@@ -534,15 +548,16 @@ where
 
 pub fn certifier_action<S>(certifier_index: usize, extent: usize) -> impl Fn(&mut S, &mut dyn Context) -> ActionResult
 where
-    S: CertifierState,
+    S: CertifierState + XdbState,
 {
     move |s, _| {
-        let certifier = &mut s.certifiers()[certifier_index];
-        match certifier.stream.consume() {
+        let message = s.certifiers()[certifier_index].stream.consume();
+        match message {
             None => Blocked,
             Some((offset, message)) => {
                 match message.deref() {
                     MessageKind::CandidateMessage(candidate_message) => {
+                        let certifier = &mut s.certifiers()[certifier_index];
                         let result = certifier.suffix.insert(
                             candidate_message.rec.readset.clone(),
                             candidate_message.rec.writeset.clone(),
@@ -563,24 +578,43 @@ where
                             &candidate_message.statemap,
                             outcome
                         );
-                        let decision_message = match outcome {
-                            Outcome::Commit(safepoint, _) => {
-                                DecisionMessageKind::CommitMessage(CommitData {
-                                    candidate,
-                                    safepoint,
-                                    statemap: candidate_message.statemap.clone(),
-                                })
+                        let result = s.xdb().assign(candidate.rec.xid, &outcome);
+                        let new_redaction = match result {
+                            Ok(New(_)) => {
+                                true
                             }
-                            Outcome::Abort(reason, _) => {
-                                DecisionMessageKind::AbortMessage(AbortData { candidate, reason })
+                            Ok(Existing(_)) => {
+                                log::trace!("  duplicate");
+                                false
+                            },
+                            Err(error) => {
+                                return Breached(format!("XDB assignment error: {:?}", error));
                             }
                         };
-                        certifier
-                            .stream
-                            .produce(Rc::new(DecisionMessage(decision_message)));
+
+                        if new_redaction {
+                            let decision_message = match outcome {
+                                Outcome::Commit(safepoint, _) => {
+                                    DecisionMessageKind::CommitMessage(CommitData {
+                                        candidate,
+                                        safepoint,
+                                        statemap: candidate_message.statemap.clone(),
+                                    })
+                                }
+                                Outcome::Abort(reason, _) => {
+                                    DecisionMessageKind::AbortMessage(AbortData { candidate, reason })
+                                }
+                            };
+
+                            let certifier = &s.certifiers()[certifier_index];
+                            certifier
+                                .stream
+                                .produce(Rc::new(DecisionMessage(decision_message)));
+                        }
                     }
                     MessageKind::DecisionMessage(decision) => {
                         log::trace!("decision {:?}", decision.candidate());
+                        let certifier = &mut s.certifiers()[certifier_index];
                         let result = certifier.suffix.decide(decision.candidate().ver);
                         if let Err(error) = result {
                             return Breached(format!("suffix decision error: {:?}", error));
