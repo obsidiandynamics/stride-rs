@@ -5,7 +5,7 @@ use stride::havoc::model::ActionResult::{Blocked, Joined, Ran};
 use stride::havoc::model::Retention::{Strong, Weak};
 use stride::havoc::model::{name_of, rand_element, Model};
 use stride::*;
-use Message::Candidate;
+use MessageKind::CandidateMessage;
 use stride::examiner::Record;
 
 fn asserter(
@@ -94,7 +94,7 @@ fn build_model(cfg: BankCfg) -> Model<SystemState> {
             let changes = &[(from, from_val - xfer_amount), (to, to_val + xfer_amount)];
             let (readvers, snapshot) = Record::compress(cpt_readvers, cpt_snapshot);
             let statemap = Statemap::map(changes, Op::Set);
-            cohort.stream.produce(Rc::new(Candidate(CandidateMessage {
+            cohort.stream.produce(Rc::new(CandidateMessage(CandidateData {
                 rec: Record {
                     xid: uuidify(cohort_index, run),
                     readset,

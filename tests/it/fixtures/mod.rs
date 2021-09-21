@@ -17,8 +17,8 @@ use stride::havoc::model::{rand_element, ActionResult, Context, Model};
 use stride::havoc::sim::{Sim, SimResult};
 use stride::havoc::{checker, sim, Sublevel};
 use stride::suffix::{Suffix};
-use stride::Message::Decision;
-use stride::{AbortMessage, CommitMessage, DecisionMessage, Message};
+use stride::MessageKind::DecisionMessage;
+use stride::{AbortData, CommitData, DecisionMessageKind, MessageKind};
 
 mod xdb;
 
@@ -55,11 +55,11 @@ impl SystemState {
 
     pub fn cohort_txns(&self, cohort_index: usize) -> usize {
         self.certifier.stream.count(|msg| match msg {
-            Message::Candidate(candidate) => {
+            MessageKind::CandidateMessage(candidate) => {
                 let (pid, _) = deuuid::<usize, usize>(candidate.rec.xid);
                 pid == cohort_index
             }
-            Message::Decision(_) => false,
+            MessageKind::DecisionMessage(_) => false,
         })
     }
 }
@@ -119,14 +119,14 @@ impl Statemap {
 #[derive(Debug)]
 pub struct Cohort {
     pub replica: Replica,
-    pub stream: Stream<Message<Statemap>>,
+    pub stream: Stream<MessageKind<Statemap>>,
 }
 
 #[derive(Debug)]
 pub struct Certifier {
     pub suffix: Suffix,
     pub examiner: Examiner,
-    pub stream: Stream<Message<Statemap>>,
+    pub stream: Stream<MessageKind<Statemap>>,
 }
 
 #[derive(Debug)]
@@ -450,14 +450,14 @@ where
         let installable_commits = {
             let cohort = &mut s.cohorts()[cohort_index];
             cohort.stream.find(|message| match message {
-                Message::Candidate(_) => false,
-                Message::Decision(decision) => match decision {
-                    DecisionMessage::Commit(commit) => cohort.replica.can_install_ooo(
+                MessageKind::CandidateMessage(_) => false,
+                MessageKind::DecisionMessage(decision) => match decision {
+                    DecisionMessageKind::CommitMessage(commit) => cohort.replica.can_install_ooo(
                         &commit.statemap,
                         commit.safepoint,
                         commit.candidate.ver,
                     ),
-                    DecisionMessage::Abort(_) => false,
+                    DecisionMessageKind::AbortMessage(_) => false,
                 },
             })
         };
@@ -504,11 +504,11 @@ where
                 }
                 Some((_, message)) => {
                     match message.deref() {
-                        Message::Candidate(_) => {}
-                        Message::Decision(decision) => {
+                        MessageKind::CandidateMessage(_) => {}
+                        MessageKind::DecisionMessage(decision) => {
                             at_least_one_decision_consumed = true;
                             match decision {
-                                DecisionMessage::Commit(commit) => {
+                                DecisionMessageKind::CommitMessage(commit) => {
                                     let after_check = asserter(&s.cohorts());
                                     let cohort = &mut s.cohorts()[cohort_index];
                                     cohort
@@ -518,7 +518,7 @@ where
                                         return Breached(error);
                                     }
                                 }
-                                DecisionMessage::Abort(_) => {}
+                                DecisionMessageKind::AbortMessage(_) => {}
                             }
                         }
                     }
@@ -541,7 +541,7 @@ where
             None => Blocked,
             Some((offset, message)) => {
                 match message.deref() {
-                    Message::Candidate(candidate_message) => {
+                    MessageKind::CandidateMessage(candidate_message) => {
                         let result = certifier.suffix.insert(
                             candidate_message.rec.readset.clone(),
                             candidate_message.rec.writeset.clone(),
@@ -564,21 +564,21 @@ where
                         );
                         let decision_message = match outcome {
                             Outcome::Commit(safepoint, _) => {
-                                DecisionMessage::Commit(CommitMessage {
+                                DecisionMessageKind::CommitMessage(CommitData {
                                     candidate,
                                     safepoint,
                                     statemap: candidate_message.statemap.clone(),
                                 })
                             }
                             Outcome::Abort(reason, _) => {
-                                DecisionMessage::Abort(AbortMessage { candidate, reason })
+                                DecisionMessageKind::AbortMessage(AbortData { candidate, reason })
                             }
                         };
                         certifier
                             .stream
-                            .produce(Rc::new(Decision(decision_message)));
+                            .produce(Rc::new(DecisionMessage(decision_message)));
                     }
-                    Message::Decision(decision) => {
+                    MessageKind::DecisionMessage(decision) => {
                         log::trace!("decision {:?}", decision.candidate());
                         let result = certifier.suffix.decide(decision.candidate().ver);
                         if let Err(error) = result {

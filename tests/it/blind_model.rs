@@ -9,7 +9,7 @@ use stride::havoc::model::ActionResult::{Joined, Ran};
 use stride::havoc::model::Retention::{Strong, Weak};
 
 use super::fixtures::*;
-use Message::Candidate;
+use MessageKind::CandidateMessage;
 use stride::examiner::Record;
 
 fn asserter() -> impl Fn(&[Cohort]) -> Box<dyn Fn(&[Cohort]) -> Option<String>> {
@@ -61,7 +61,7 @@ fn build_model(cfg: BlindCfg) -> Model<SystemState> {
             let selected_op = ops[run % 2];
             let (readvers, snapshot) = Record::compress(cpt_readvers, cpt_snapshot);
             let statemap = Statemap::new(vec![(0, selected_op)]);
-            cohort.stream.produce(Rc::new(Candidate(CandidateMessage {
+            cohort.stream.produce(Rc::new(CandidateMessage(CandidateData {
                 rec: Record {
                     xid: uuidify(cohort_index, run),
                     readset,

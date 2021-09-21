@@ -6,7 +6,7 @@ use stride::havoc::model::ActionResult::{Joined, Ran};
 use stride::havoc::model::Retention::{Strong, Weak};
 
 use super::fixtures::*;
-use Message::Candidate;
+use MessageKind::CandidateMessage;
 use stride::examiner::Record;
 
 fn asserter(values: &[i32], cohort_index: usize) -> impl Fn(&[Cohort]) -> Box<dyn Fn(&[Cohort]) -> Option<String>> {
@@ -52,7 +52,7 @@ fn build_model(cfg: SwapsCfg) -> Model<SystemState> {
             let cpt_snapshot = cohort.replica.ver;
             let statemap = Statemap::map(&[(p, old_q_val), (q, old_p_val)], Op::Set);
             let (readvers, snapshot) = Record::compress(cpt_readvers, cpt_snapshot);
-            cohort.stream.produce(Rc::new(Candidate(CandidateMessage {
+            cohort.stream.produce(Rc::new(CandidateMessage(CandidateData {
                 rec: Record {
                     xid: uuidify(cohort_index, run),
                     readset: itemset.to_vec(),

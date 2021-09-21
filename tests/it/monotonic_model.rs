@@ -5,7 +5,7 @@ use stride::havoc::model::ActionResult::{Joined, Ran, Blocked};
 use stride::havoc::model::Retention::{Strong, Weak};
 use stride::havoc::model::{name_of, Model};
 use stride::*;
-use Message::Candidate;
+use MessageKind::CandidateMessage;
 use stride::examiner::Record;
 
 fn asserter(cohort_index: usize) -> impl Fn(&[Cohort]) -> Box<dyn Fn(&[Cohort]) -> Option<String>> {
@@ -80,7 +80,7 @@ fn build_model(cfg: MonotonicCfg) -> Model<SystemState> {
             let changes = &[(0, item_val + 1)];
             let (readvers, snapshot) = Record::compress(cpt_readvers, cpt_snapshot);
             let statemap = Statemap::map(changes, Op::Set);
-            cohort.stream.produce(Rc::new(Candidate(CandidateMessage {
+            cohort.stream.produce(Rc::new(CandidateMessage(CandidateData {
                 rec: Record {
                     xid: uuidify(cohort_index, run),
                     readset,
@@ -112,7 +112,7 @@ fn build_model(cfg: MonotonicCfg) -> Model<SystemState> {
             let changes = &[(1, source_item_val)];
             let (readvers, snapshot) = Record::compress(cpt_readvers, cpt_snapshot);
             let statemap = Statemap::map(changes, Op::Set);
-            cohort.stream.produce(Rc::new(Candidate(CandidateMessage {
+            cohort.stream.produce(Rc::new(CandidateMessage(CandidateData {
                 rec: Record {
                     xid: uuidify(cohort_index, run),
                     readset,

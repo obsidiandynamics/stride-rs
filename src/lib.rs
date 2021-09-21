@@ -5,71 +5,71 @@ pub mod havoc;
 pub mod suffix;
 
 #[derive(Debug)]
-pub enum Message<S> {
-    Candidate(CandidateMessage<S>),
-    Decision(DecisionMessage<S>),
+pub enum MessageKind<S> {
+    CandidateMessage(CandidateData<S>),
+    DecisionMessage(DecisionMessageKind<S>),
 }
 
-impl <S> Message<S> {
-    pub fn as_candidate(&self) -> Option<&CandidateMessage<S>> {
+impl <S> MessageKind<S> {
+    pub fn as_candidate(&self) -> Option<&CandidateData<S>> {
         match self {
-            Message::Candidate(candidate) => Some(candidate),
-            Message::Decision(_) => None
+            MessageKind::CandidateMessage(candidate) => Some(candidate),
+            MessageKind::DecisionMessage(_) => None
         }
     }
 
-    pub fn as_decision(&self) -> Option<&DecisionMessage<S>> {
+    pub fn as_decision(&self) -> Option<&DecisionMessageKind<S>> {
         match self {
-            Message::Candidate(_) => None,
-            Message::Decision(decision) => Some(decision)
+            MessageKind::CandidateMessage(_) => None,
+            MessageKind::DecisionMessage(decision) => Some(decision)
         }
     }
 }
 
 #[derive(Debug)]
-pub struct CandidateMessage<S> {
+pub struct CandidateData<S> {
     pub rec: Record,
     pub statemap: S,
 }
 
 #[derive(Debug)]
-pub enum DecisionMessage<S> {
-    Commit(CommitMessage<S>),
-    Abort(AbortMessage)
+pub enum DecisionMessageKind<S> {
+    CommitMessage(CommitData<S>),
+    AbortMessage(AbortData)
 }
 
-impl<S> DecisionMessage<S> {
-    pub fn as_commit(&self) -> Option<&CommitMessage<S>> {
+impl<S> DecisionMessageKind<S> {
+    pub fn as_commit(&self) -> Option<&CommitData<S>> {
         match self {
-            DecisionMessage::Commit(message) => Some(message),
-            DecisionMessage::Abort(_) => None
+            DecisionMessageKind::CommitMessage(message) => Some(message),
+            DecisionMessageKind::AbortMessage(_) => None
         }
     }
 
-    pub fn as_abort(&self) -> Option<&AbortMessage> {
+    pub fn as_abort(&self) -> Option<&AbortData> {
         match self {
-            DecisionMessage::Commit(_) => None,
-            DecisionMessage::Abort(message) => Some(message)
+            DecisionMessageKind::CommitMessage(_) => None,
+            DecisionMessageKind::AbortMessage(message) => Some(message)
         }
     }
 
     pub fn candidate(&self) -> &Candidate {
         match self {
-            DecisionMessage::Commit(commit) => &commit.candidate,
-            DecisionMessage::Abort(abort) => &abort.candidate
+            DecisionMessageKind::CommitMessage(commit) => &commit.candidate,
+            DecisionMessageKind::AbortMessage(abort) => &abort.candidate
         }
     }
 }
 
 #[derive(Debug)]
-pub struct CommitMessage<S> {
+pub struct CommitData<S> {
     pub candidate: Candidate,
     pub safepoint: u64,
     pub statemap: S
 }
 
 #[derive(Debug)]
-pub struct AbortMessage {
+pub struct AbortData {
     pub candidate: Candidate,
     pub reason: AbortReason
 }
