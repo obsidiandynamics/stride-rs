@@ -67,7 +67,7 @@ fn build_model(cfg: MonotonicCfg) -> Model<SystemState> {
 
     let txns_per_cohort = cfg.txns_per_cohort;
     for cohort_index in 0..cfg.num_cohorts {
-        let itemset: Vec<String> = (0..2).map(|i| format!("item-{}", i)).collect();
+        let itemset = (0..2).map(|i| format!("item-{}", i)).collect::<Vec<_>>();
         model.add_action(format!("counter-{}", cohort_index), Weak, move |s, _| {
             let run = s.cohort_txns(cohort_index);
             if run == txns_per_cohort {

@@ -12,7 +12,9 @@ fn asserter(num_values: usize, cohort_index: usize) -> impl Fn(&[Cohort]) -> Box
     move |_| {
         Box::new(move |after| {
             let replica = &after[cohort_index].replica;
-            let computed_sum: usize = replica.items.iter().map(|&(item_val, _)| item_val as usize).sum();
+            let computed_sum = replica.items.iter()
+                .map(|&(item_val, _)| item_val as usize)
+                .sum::<usize>();
             if computed_sum != 0 && computed_sum != num_values {
                 Some(format!(
                     "expected: 0 or {}, computed: {} for {:?}",

@@ -12,7 +12,7 @@ fn asserter(
     values: &[i32],
     cohort_index: usize,
 ) -> impl Fn(&[Cohort]) -> Box<dyn Fn(&[Cohort]) -> Option<String>> {
-    let expected_sum: i32 = values.iter().sum();
+    let expected_sum = values.iter().sum::<i32>();
     move |_| {
         Box::new(move |after| {
             let replica = &after[cohort_index].replica;

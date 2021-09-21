@@ -1,8 +1,8 @@
 use crate::havoc::Sublevel::Off;
 
+pub mod component;
 pub mod model;
 pub mod checker;
-pub mod component;
 pub mod sim;
 
 #[derive(Copy, Clone, Debug)]
