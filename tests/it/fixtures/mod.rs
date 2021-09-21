@@ -2,19 +2,20 @@ use std::fmt::Debug;
 use std::ops::Deref;
 use std::rc::Rc;
 
-use stride::{AbortData, CommitData, DecisionMessageKind, MessageKind};
 use stride::examiner::{Candidate, Examiner, Outcome};
 use stride::havoc::model::{ActionResult, Context, rand_element};
 use stride::havoc::model::ActionResult::{Blocked, Breached, Joined, Ran};
-use stride::MessageKind::DecisionMessage;
 use stride::suffix::Suffix;
 
 use crate::fixtures::broker::{Broker, Stream};
 use crate::fixtures::xdb::Redaction::{Existing, New};
 use crate::fixtures::xdb::Xdb;
 use crate::utils::deuuid;
+use crate::fixtures::schema::{MessageKind, DecisionMessageKind, AbortData, CommitData};
+use crate::fixtures::schema::MessageKind::DecisionMessage;
 
 mod broker;
+pub mod schema;
 mod xdb;
 
 #[derive(Debug)]

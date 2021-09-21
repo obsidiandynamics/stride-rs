@@ -1,14 +1,16 @@
 use std::rc::Rc;
 
-use super::fixtures::*;
-use stride::havoc::model::ActionResult::{Joined, Ran, Blocked};
-use stride::havoc::model::Retention::{Strong, Weak};
-use stride::havoc::model::{name_of, Model, rand_element};
-use stride::*;
-use MessageKind::CandidateMessage;
 use stride::examiner::Record;
-use crate::utils::uuidify;
+use stride::havoc::model::{Model, name_of, rand_element};
+use stride::havoc::model::ActionResult::{Blocked, Joined, Ran};
+use stride::havoc::model::Retention::{Strong, Weak};
+
+use crate::fixtures::schema::CandidateData;
+use crate::fixtures::schema::MessageKind::CandidateMessage;
 use crate::harness::{dfs, sim};
+use crate::utils::uuidify;
+
+use super::fixtures::*;
 
 fn asserter(cohort_index: usize) -> impl Fn(&[Cohort]) -> Box<dyn Fn(&[Cohort]) -> Option<String>> {
     move |_| {

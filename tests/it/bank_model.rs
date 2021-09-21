@@ -1,14 +1,16 @@
 use std::rc::Rc;
 
-use super::fixtures::*;
 use stride::examiner::Record;
+use stride::havoc::model::{Model, name_of, rand_element};
 use stride::havoc::model::ActionResult::{Blocked, Joined, Ran};
 use stride::havoc::model::Retention::{Strong, Weak};
-use stride::havoc::model::{name_of, rand_element, Model};
-use stride::*;
-use MessageKind::CandidateMessage;
-use crate::utils::uuidify;
+
+use crate::fixtures::schema::CandidateData;
+use crate::fixtures::schema::MessageKind::CandidateMessage;
 use crate::harness::{dfs, sim};
+use crate::utils::uuidify;
+
+use super::fixtures::*;
 
 fn asserter(
     values: &[i32],
