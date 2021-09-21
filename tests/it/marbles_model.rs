@@ -29,44 +29,47 @@ struct MarblesCfg<'a> {
     num_values: usize,
     num_cohorts: usize,
     txns_per_cohort: usize,
+    num_certifiers: usize,
     extent: usize,
     name: &'a str,
 }
 
 fn build_model(cfg: MarblesCfg) -> Model<SystemState> {
     // initial values are alternating 0s and 1s
-    let values: Vec<i32> = (0..cfg.num_values).map(|i| (i % 2) as i32).collect();
+    let values = (0..cfg.num_values).map(|i| (i % 2) as i32).collect::<Vec<_>>();
     let num_cohorts = cfg.num_cohorts;
-    let mut model = Model::new(move || SystemState::new(num_cohorts, &values)).with_name(cfg.name.into());
+    let num_certifiers = cfg.num_certifiers;
+    let mut model = Model::new(move || SystemState::new(num_cohorts, &values, num_certifiers))
+        .with_name(cfg.name.into());
 
     let txns_per_cohort = cfg.txns_per_cohort;
     for cohort_index in 0..cfg.num_cohorts {
-        let itemset: Vec<String> = (0..cfg.num_values).map(|i| format!("item-{}", i)).collect();
+        let itemset = (0..cfg.num_values).map(|i| format!("item-{}", i)).collect::<Vec<_>>();
         // each cohort is assigned a specific 'to' color
         let target_color = (cohort_index % 2) as i32;
         model.add_action(format!("initiator-{}", cohort_index), Weak, move |s, _| {
             let run = s.cohort_txns(cohort_index);
             let cohort = &mut s.cohorts[cohort_index];
             let readset = itemset.clone();
-            let cpt_readvers: Vec<u64> = cohort
+            let cpt_readvers = cohort
                 .replica
                 .items
                 .iter()
                 .map(|&(_, item_ver)| item_ver)
-                .collect();
+                .collect::<Vec<_>>();
             let cpt_snapshot = cohort.replica.ver;
-            let changes: Vec<(usize, i32)> = cohort
+            let changes = cohort
                 .replica
                 .items
                 .iter()
                 .enumerate()
                 .filter(|(_, &(item_val, _))| item_val != target_color)
                 .map(|(item, _)| (item, target_color))
-                .collect();
-            let writeset: Vec<String> = changes
+                .collect::<Vec<_>>();
+            let writeset = changes
                 .iter()
                 .map(|&(item, _)| itemset[item].clone())
-                .collect();
+                .collect::<Vec<_>>();
             let (readvers, snapshot) = Record::compress(cpt_readvers, cpt_snapshot);
             let statemap = Statemap::map(&changes, Op::Set);
             cohort.stream.produce(Rc::new(CandidateMessage(CandidateData {
@@ -88,7 +91,9 @@ fn build_model(cfg: MarblesCfg) -> Model<SystemState> {
         model.add_action(format!("updater-{}", cohort_index), Weak, updater_action(cohort_index, asserter(cfg.num_values, cohort_index)));
         model.add_action(format!("replicator-{}", cohort_index), Weak, replicator_action(cohort_index, asserter(cfg.num_values, cohort_index)));
     }
-    model.add_action("certifier".into(), Weak, certifier_action(cfg.extent));
+    for certifier_index in 0..cfg.num_certifiers {
+        model.add_action(format!("certifier-{}", certifier_index), Weak, certifier_action(certifier_index, cfg.extent));
+    }
     model.add_action("supervisor".into(), Strong, supervisor_action(cfg.num_cohorts * cfg.txns_per_cohort));
     model
 }
@@ -99,6 +104,7 @@ fn dfs_marbles_1x1() {
         num_values: 2,
         num_cohorts: 1,
         txns_per_cohort: 1,
+        num_certifiers: 1,
         extent: 1,
         name: name_of(&dfs_marbles_1x1)
     }));
@@ -110,6 +116,7 @@ fn dfs_marbles_1x2() {
         num_values: 2,
         num_cohorts: 1,
         txns_per_cohort: 2,
+        num_certifiers: 1,
         extent: 2,
         name: name_of(&dfs_marbles_1x2)
     }));
@@ -122,6 +129,7 @@ fn dfs_marbles_2x1() {
         num_values: 2,
         num_cohorts: 2,
         txns_per_cohort: 1,
+        num_certifiers: 1,
         extent: 2,
         name: name_of(&dfs_marbles_2x1)
     }));
@@ -134,6 +142,7 @@ fn dfs_marbles_2x2() {
         num_values: 2,
         num_cohorts: 2,
         txns_per_cohort: 2,
+        num_certifiers: 1,
         extent: 4,
         name: name_of(&dfs_marbles_2x2)
     }));
@@ -145,6 +154,7 @@ fn sim_marbles_1x1() {
         num_values: 2,
         num_cohorts: 1,
         txns_per_cohort: 1,
+        num_certifiers: 1,
         extent: 1,
         name: name_of(&sim_marbles_1x1)
     }), 10);
@@ -156,6 +166,7 @@ fn sim_marbles_2x1() {
         num_values: 2,
         num_cohorts: 2,
         txns_per_cohort: 1,
+        num_certifiers: 1,
         extent: 2,
         name: name_of(&sim_marbles_2x1)
     }), 20);
@@ -167,6 +178,7 @@ fn sim_marbles_2x2() {
         num_values: 2,
         num_cohorts: 2,
         txns_per_cohort: 2,
+        num_certifiers: 1,
         extent: 4,
         name: name_of(&sim_marbles_2x2)
     }), 40);
@@ -178,6 +190,7 @@ fn sim_marbles_3x1() {
         num_values: 2,
         num_cohorts: 3,
         txns_per_cohort: 1,
+        num_certifiers: 1,
         extent: 3,
         name: name_of(&sim_marbles_3x1)
     }), 40);
@@ -189,6 +202,7 @@ fn sim_marbles_3x2() {
         num_values: 2,
         num_cohorts: 3,
         txns_per_cohort: 2,
+        num_certifiers: 1,
         extent: 6,
         name: name_of(&sim_marbles_3x2)
     }), 80);
@@ -200,6 +214,7 @@ fn sim_marbles_4x1() {
         num_values: 2,
         num_cohorts: 4,
         txns_per_cohort: 1,
+        num_certifiers: 1,
         extent: 4,
         name: name_of(&sim_marbles_4x1)
     }), 80);
@@ -211,6 +226,7 @@ fn sim_marbles_4x2_1() {
         num_values: 2,
         num_cohorts: 4,
         txns_per_cohort: 2,
+        num_certifiers: 1,
         extent: 1,
         name: name_of(&sim_marbles_4x2_1),
     }), 160);
@@ -222,6 +238,7 @@ fn sim_marbles_4x2_8() {
         num_values: 2,
         num_cohorts: 4,
         txns_per_cohort: 2,
+        num_certifiers: 1,
         extent: 8,
         name: name_of(&sim_marbles_4x2_8),
     }), 160);

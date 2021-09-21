@@ -31,14 +31,17 @@ struct SwapsCfg<'a> {
     values: &'a [i32],
     combos: &'a [(usize, usize)],
     txns_per_cohort: usize,
+    num_certifiers: usize,
     extent: usize,
     name: &'a str,
 }
 
 fn build_model(cfg: SwapsCfg) -> Model<SystemState> {
     let num_cohorts = cfg.combos.len();
+    let num_certifiers = cfg.num_certifiers;
     let values = cfg.values;
-    let mut model = Model::new(move || SystemState::new(num_cohorts, values)).with_name(cfg.name.into());
+    let mut model = Model::new(move || SystemState::new(num_cohorts, values, num_certifiers))
+        .with_name(cfg.name.into());
 
     let txns_per_cohort = cfg.txns_per_cohort;
     for (cohort_index, &(p, q)) in cfg.combos.iter().enumerate() {
@@ -71,7 +74,9 @@ fn build_model(cfg: SwapsCfg) -> Model<SystemState> {
         model.add_action(format!("updater-{}", cohort_index), Weak, updater_action(cohort_index, asserter(values, cohort_index)));
         model.add_action(format!("replicator-{}", cohort_index), Weak, replicator_action(cohort_index, asserter(values, cohort_index)));
     }
-    model.add_action("certifier".into(), Weak, certifier_action(cfg.extent));
+    for certifier_index in 0..cfg.num_certifiers {
+        model.add_action(format!("certifier-{}", certifier_index), Weak, certifier_action(certifier_index, cfg.extent));
+    }
     model.add_action("supervisor".into(), Strong, supervisor_action(num_cohorts * cfg.txns_per_cohort));
     model
 }
@@ -82,6 +87,7 @@ fn dfs_swaps_1x1() {
         values: &[101, 103],
         combos: &[(0, 1)],
         txns_per_cohort: 1,
+        num_certifiers: 1,
         extent: 1,
         name: name_of(&dfs_swaps_1x1)
     }));
@@ -93,6 +99,7 @@ fn dfs_swaps_1x2() {
         values: &[101, 103],
         combos: &[(0, 1)],
         txns_per_cohort: 2,
+        num_certifiers: 1,
         extent: 2,
         name: name_of(&dfs_swaps_1x2)
     }));
@@ -105,6 +112,7 @@ fn dfs_swaps_2x1() {
         values: &[101, 103, 107],
         combos: &[(0, 1), (1, 2)],
         txns_per_cohort: 1,
+        num_certifiers: 1,
         extent: 2,
         name: name_of(&dfs_swaps_2x1)
     }));
@@ -117,6 +125,7 @@ fn dfs_swaps_2x2() {
         values: &[101, 103, 107],
         combos: &[(0, 1), (1, 2)],
         txns_per_cohort: 2,
+        num_certifiers: 1,
         extent: 4,
         name: name_of(&dfs_swaps_2x2)
     }));
@@ -129,6 +138,7 @@ fn dfs_swaps_3x1() {
         values: &[101, 103, 107],
         combos: &[(0, 1), (1, 2), (0, 2)],
         txns_per_cohort: 1,
+        num_certifiers: 1,
         extent: 3,
         name: name_of(&dfs_swaps_3x1)
     }));
@@ -140,6 +150,7 @@ fn sim_swaps_1x1() {
         values: &[101, 103],
         combos: &[(0, 1)],
         txns_per_cohort: 1,
+        num_certifiers: 1,
         extent: 1,
         name: name_of(&sim_swaps_1x1)
     }), 10);
@@ -151,6 +162,7 @@ fn sim_swaps_2x1() {
         values: &[101, 103, 107],
         combos: &[(0, 1), (1, 2)],
         txns_per_cohort: 1,
+        num_certifiers: 1,
         extent: 2,
         name: name_of(&sim_swaps_2x1)
     }), 20);
@@ -162,6 +174,7 @@ fn sim_swaps_2x2() {
         values: &[101, 103, 107],
         combos: &[(0, 1), (1, 2)],
         txns_per_cohort: 2,
+        num_certifiers: 1,
         extent: 4,
         name: name_of(&sim_swaps_2x2)
     }), 40);
@@ -173,6 +186,7 @@ fn sim_swaps_3x1() {
         values: &[101, 103, 107],
         combos: &[(0, 1), (1, 2), (0, 2)],
         txns_per_cohort: 1,
+        num_certifiers: 1,
         extent: 3,
         name: name_of(&sim_swaps_3x1)
     }), 40);
@@ -184,6 +198,7 @@ fn sim_swaps_3x2() {
         values: &[101, 103, 107],
         combos: &[(0, 1), (1, 2), (0, 2)],
         txns_per_cohort: 2,
+        num_certifiers: 1,
         extent: 6,
         name: name_of(&sim_swaps_3x2)
     }), 80);
@@ -195,6 +210,7 @@ fn sim_swaps_4x1() {
         values: &[101, 103, 107, 111],
         combos: &[(0, 1), (1, 2), (2, 3)],
         txns_per_cohort: 1,
+        num_certifiers: 1,
         extent: 4,
         name: name_of(&sim_swaps_4x1)
     }), 80);
@@ -206,6 +222,7 @@ fn sim_swaps_4x2_1() {
         values: &[101, 103, 107, 111],
         combos: &[(0, 1), (1, 2), (2, 3)],
         txns_per_cohort: 2,
+        num_certifiers: 1,
         extent: 1,
         name: name_of(&sim_swaps_4x2_1)
     }), 160);
@@ -217,6 +234,7 @@ fn sim_swaps_4x2_8() {
         values: &[101, 103, 107, 111],
         combos: &[(0, 1), (1, 2), (2, 3)],
         txns_per_cohort: 2,
+        num_certifiers: 1,
         extent: 8,
         name: name_of(&sim_swaps_4x2_8)
     }), 160);

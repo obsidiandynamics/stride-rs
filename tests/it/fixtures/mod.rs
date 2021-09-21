@@ -25,36 +25,37 @@ mod xdb;
 #[derive(Debug)]
 pub struct SystemState {
     pub cohorts: Vec<Cohort>,
-    pub certifier: Certifier,
+    pub certifiers: Vec<Certifier>,
 }
 
 impl SystemState {
-    pub fn new(num_cohorts: usize, init_values: &[i32]) -> Self {
+    pub fn new(num_cohorts: usize, init_values: &[i32], num_certifiers: usize) -> Self {
         let broker = Broker::new(1);
         let cohorts = (0..num_cohorts)
-            .into_iter()
             .map(|_| Cohort {
                 replica: Replica::new(&init_values),
                 stream: broker.stream(),
             })
             .collect();
-        let certifier = Certifier {
-            suffix: Suffix::default(),
-            examiner: Examiner::default(),
-            stream: broker.stream(),
-        };
+        let certifiers = (0..num_certifiers)
+            .map(|_| Certifier {
+                suffix: Suffix::default(),
+                examiner: Examiner::default(),
+                stream: broker.stream(),
+            })
+            .collect();
 
-        SystemState { cohorts, certifier }
+        SystemState { cohorts, certifiers }
     }
 
     pub fn total_txns(&self) -> usize {
-        self.certifier
+        self.certifiers[0]
             .stream
             .count(|msg| msg.as_candidate().is_some())
     }
 
     pub fn cohort_txns(&self, cohort_index: usize) -> usize {
-        self.certifier.stream.count(|msg| match msg {
+        self.certifiers[0].stream.count(|msg| match msg {
             MessageKind::CandidateMessage(candidate) => {
                 let (pid, _) = deuuid::<usize, usize>(candidate.rec.xid);
                 pid == cohort_index
@@ -65,8 +66,8 @@ impl SystemState {
 }
 
 impl CertifierState for SystemState {
-    fn certifier(&mut self) -> &mut Certifier {
-        &mut self.certifier
+    fn certifiers(&mut self) -> &mut [Certifier] {
+        &mut self.certifiers
     }
 }
 
@@ -435,7 +436,7 @@ pub trait CohortState {
 }
 
 pub trait CertifierState {
-    fn certifier(&mut self) -> &mut Certifier;
+    fn certifiers(&mut self) -> &mut [Certifier];
 }
 
 pub fn updater_action<S, A>(
@@ -531,12 +532,12 @@ where
     }
 }
 
-pub fn certifier_action<S>(extent: usize) -> impl Fn(&mut S, &mut dyn Context) -> ActionResult
+pub fn certifier_action<S>(certifier_index: usize, extent: usize) -> impl Fn(&mut S, &mut dyn Context) -> ActionResult
 where
     S: CertifierState,
 {
     move |s, _| {
-        let certifier = s.certifier();
+        let certifier = &mut s.certifiers()[certifier_index];
         match certifier.stream.consume() {
             None => Blocked,
             Some((offset, message)) => {

@@ -26,19 +26,22 @@ struct RosterCfg<'a> {
     values: &'a [i32],
     num_cohorts: usize,
     txns_per_cohort: usize,
+    num_certifiers: usize,
     extent: usize,
     name: &'a str
 }
 
 fn build_model(cfg: RosterCfg) -> Model<SystemState> {
     let num_cohorts = cfg.num_cohorts;
+    let num_certifiers = cfg.num_certifiers;
     let values = cfg.values;
-    let mut model = Model::new(move || SystemState::new(num_cohorts, values)).with_name(cfg.name.into());
+    let mut model = Model::new(move || SystemState::new(num_cohorts, values, num_certifiers))
+        .with_name(cfg.name.into());
     let expected_txns = cfg.num_cohorts * cfg.txns_per_cohort;
     let num_values = values.len();
 
     for cohort_index in 0..cfg.num_cohorts {
-        let itemset: Vec<String> = (0..num_values).map(|i| format!("item-{}", i)).collect();
+        let itemset = (0..num_values).map(|i| format!("item-{}", i)).collect::<Vec<_>>();
         // each cohort is assigned a specific item
         let our_item = cohort_index % num_values;
         model.add_action(format!("off-{}", cohort_index), Weak, move |s, c| {
@@ -55,9 +58,9 @@ fn build_model(cfg: RosterCfg) -> Model<SystemState> {
             }
             
             // find all items other than our item that are rostered on 
-            let available_items: Vec<(usize, &(i32, u64))> = cohort.replica.items.iter().enumerate()
+            let available_items = cohort.replica.items.iter().enumerate()
                 .filter(|&(item, &(item_val, _))| item != our_item && item_val != 0)
-                .collect();
+                .collect::<Vec<_>>();
 
             if available_items.is_empty() {
                 return Blocked
@@ -89,7 +92,7 @@ fn build_model(cfg: RosterCfg) -> Model<SystemState> {
             }
         });
 
-        let itemset: Vec<String> = (0..num_values).map(|i| format!("item-{}", i)).collect();
+        let itemset = (0..num_values).map(|i| format!("item-{}", i)).collect::<Vec<_>>();
         let our_item = cohort_index % num_values;
         model.add_action(format!("on-{}", cohort_index), Weak, move |s, _| {
             let run = s.total_txns();
@@ -130,7 +133,9 @@ fn build_model(cfg: RosterCfg) -> Model<SystemState> {
         model.add_action(format!("updater-{}", cohort_index), Weak, updater_action(cohort_index, asserter(cohort_index)));
         model.add_action(format!("replicator-{}", cohort_index), Weak, replicator_action(cohort_index, asserter(cohort_index)));
     }
-    model.add_action("certifier".into(), Weak, certifier_action(cfg.extent));
+    for certifier_index in 0..cfg.num_certifiers {
+        model.add_action(format!("certifier-{}", certifier_index), Weak, certifier_action(certifier_index, cfg.extent));
+    }
     model.add_action("supervisor".into(), Strong, supervisor_action(cfg.num_cohorts * cfg.txns_per_cohort));
     model
 }
@@ -141,6 +146,7 @@ fn dfs_roster_1x1() {
         values: &[0, 1],
         num_cohorts: 1,
         txns_per_cohort: 1,
+        num_certifiers: 1,
         extent: 1,
         name: name_of(&dfs_roster_1x1)
     }));
@@ -152,6 +158,7 @@ fn dfs_roster_1x2() {
         values: &[0, 1],
         num_cohorts: 1,
         txns_per_cohort: 2,
+        num_certifiers: 1,
         extent: 2,
         name: name_of(&dfs_roster_1x2)
     }));
@@ -164,6 +171,7 @@ fn dfs_roster_2x1() {
         values: &[0, 1],
         num_cohorts: 2,
         txns_per_cohort: 1,
+        num_certifiers: 1,
         extent: 2,
         name: name_of(&dfs_roster_2x1)
     }));
@@ -176,6 +184,7 @@ fn dfs_roster_2x2() {
         values: &[0, 1],
         num_cohorts: 2,
         txns_per_cohort: 2,
+        num_certifiers: 1,
         extent: 4,
         name: name_of(&dfs_roster_2x2)
     }))
@@ -187,6 +196,7 @@ fn sim_roster_1x1() {
         values: &[0, 1],
         num_cohorts: 1,
         txns_per_cohort: 1,
+        num_certifiers: 1,
         extent: 1,
         name: name_of(&sim_roster_1x1)
     }), 10);
@@ -198,6 +208,7 @@ fn sim_roster_2x1() {
         values: &[0, 1],
         num_cohorts: 2,
         txns_per_cohort: 1,
+        num_certifiers: 1,
         extent: 2,
         name: name_of(&sim_roster_2x1)
     }), 20);
@@ -209,6 +220,7 @@ fn sim_roster_2x2() {
         values: &[0, 1],
         num_cohorts: 2,
         txns_per_cohort: 2,
+        num_certifiers: 1,
         extent: 4,
         name: name_of(&sim_roster_2x2)
     }), 40);
@@ -220,6 +232,7 @@ fn sim_roster_3x1() {
         values: &[0, 1, 0],
         num_cohorts: 3,
         txns_per_cohort: 1,
+        num_certifiers: 1,
         extent: 3,
         name: name_of(&sim_roster_3x1)
     }), 40);
@@ -231,6 +244,7 @@ fn sim_roster_3x2() {
         values: &[0, 1, 0],
         num_cohorts: 3,
         txns_per_cohort: 2,
+        num_certifiers: 1,
         extent: 6,
         name: name_of(&sim_roster_3x2)
     }), 80);
@@ -242,6 +256,7 @@ fn sim_roster_4x1() {
         values: &[0, 1, 0],
         num_cohorts: 4,
         txns_per_cohort: 1,
+        num_certifiers: 1,
         extent: 4,
         name: name_of(&sim_roster_4x1)
     }), 80);
@@ -253,6 +268,7 @@ fn sim_roster_4x2_1() {
         values: &[1, 1, 1, 1],
         num_cohorts: 4,
         txns_per_cohort: 1,
+        num_certifiers: 1,
         extent: 1,
         name: name_of(&sim_roster_4x2_1)
     }), 160);
@@ -264,6 +280,7 @@ fn sim_roster_4x2_8() {
         values: &[0, 1, 0, 1],
         num_cohorts: 3,
         txns_per_cohort: 2,
+        num_certifiers: 1,
         extent: 8,
         name: name_of(&sim_roster_4x2_8)
     }), 160);

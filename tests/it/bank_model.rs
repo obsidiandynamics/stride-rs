@@ -39,32 +39,34 @@ struct BankCfg<'a> {
     values: &'a [i32],
     num_cohorts: usize,
     txns_per_cohort: usize,
+    num_certifiers: usize,
     extent: usize,
     name: &'a str,
 }
 
 fn build_model(cfg: BankCfg) -> Model<SystemState> {
     let num_cohorts = cfg.num_cohorts;
+    let num_certifiers = cfg.num_certifiers;
     let values = cfg.values;
-    let mut model = Model::new(move || SystemState::new(num_cohorts, values))
+    let mut model = Model::new(move || SystemState::new(num_cohorts, values, num_certifiers))
         .with_name(cfg.name.into());
 
     for cohort_index in 0..cfg.num_cohorts {
-        let itemset: Vec<String> = (0..cfg.values.len())
+        let itemset = (0..cfg.values.len())
             .map(|i| format!("item-{}", i))
-            .collect();
+            .collect::<Vec<_>>();
         let txns_per_cohort = cfg.txns_per_cohort;
         model.add_action(format!("initiator-{}", cohort_index), Weak, move |s, c| {
             let run = s.cohort_txns(cohort_index);
             let cohort = &mut s.cohorts[cohort_index];
             // list of 'from' accounts that have sufficient funds to initiate a transfer
-            let from_accounts: Vec<(usize, &(i32, u64))> = cohort
+            let from_accounts = cohort
                 .replica
                 .items
                 .iter()
                 .enumerate()
                 .filter(|&(_, &(item_val, _))| item_val > 0)
-                .collect();
+                .collect::<Vec<_>>();
             if from_accounts.is_empty() {
                 return Blocked;
             }
@@ -73,13 +75,13 @@ fn build_model(cfg: BankCfg) -> Model<SystemState> {
             let &(from, &(from_val, from_ver)) = rand_element(c, &from_accounts);
 
             // list of 'to' accounts that excludes the 'from' account
-            let to_accounts: Vec<(usize, &(i32, u64))> = cohort
+            let to_accounts = cohort
                 .replica
                 .items
                 .iter()
                 .enumerate()
                 .filter(|&(item, _)| item != from)
-                .collect();
+                .collect::<Vec<_>>();
 
             // pick a 'to' account at random
             let &(to, &(to_val, to_ver)) = rand_element(c, &to_accounts);
@@ -121,7 +123,9 @@ fn build_model(cfg: BankCfg) -> Model<SystemState> {
             replicator_action(cohort_index, asserter(cfg.values, cohort_index)),
         );
     }
-    model.add_action("certifier".into(), Weak, certifier_action(cfg.extent));
+    for certifier_index in 0..cfg.num_certifiers {
+        model.add_action(format!("certifier-{}", certifier_index), Weak, certifier_action(certifier_index, cfg.extent));
+    }
     model.add_action(
         "supervisor".into(),
         Strong,
@@ -136,6 +140,7 @@ fn dfs_bank_2x1x1() {
         values: &[101, 103],
         num_cohorts: 1,
         txns_per_cohort: 1,
+        num_certifiers: 1,
         extent: 1,
         name: name_of(&dfs_bank_2x1x1),
     }));
@@ -147,6 +152,7 @@ fn dfs_bank_2x1x2() {
         values: &[101, 103],
         num_cohorts: 1,
         txns_per_cohort: 2,
+        num_certifiers: 1,
         extent: 2,
         name: name_of(&dfs_bank_2x1x2),
     }));
@@ -159,6 +165,7 @@ fn dfs_bank_2x2x1() {
         values: &[101, 103],
         num_cohorts: 2,
         txns_per_cohort: 1,
+        num_certifiers: 1,
         extent: 2,
         name: name_of(&dfs_bank_2x2x1),
     }));
@@ -171,6 +178,7 @@ fn dfs_bank_2x2x2() {
         values: &[101, 103],
         num_cohorts: 2,
         txns_per_cohort: 2,
+        num_certifiers: 1,
         extent: 4,
         name: name_of(&dfs_bank_2x2x2),
     }));
@@ -182,6 +190,7 @@ fn sim_bank_2x1x1() {
         values: &[101, 103],
         num_cohorts: 1,
         txns_per_cohort: 1,
+        num_certifiers: 1,
         extent: 1,
         name: name_of(&sim_bank_2x1x1),
     }),
@@ -194,6 +203,7 @@ fn sim_bank_2x2x1() {
         values: &[101, 103],
         num_cohorts: 2,
         txns_per_cohort: 1,
+        num_certifiers: 1,
         extent: 2,
         name: name_of(&sim_bank_2x2x1),
     }),
@@ -206,6 +216,7 @@ fn sim_bank_2x2x2() {
         values: &[101, 103],
         num_cohorts: 2,
         txns_per_cohort: 2,
+        num_certifiers: 1,
         extent: 4,
         name: name_of(&sim_bank_2x2x2),
     }),
@@ -218,6 +229,7 @@ fn sim_bank_2x3x1() {
         values: &[101, 103],
         num_cohorts: 3,
         txns_per_cohort: 1,
+        num_certifiers: 1,
         extent: 3,
         name: name_of(&sim_bank_2x3x1),
     }),
@@ -230,6 +242,7 @@ fn sim_bank_2x3x2() {
         values: &[101, 103],
         num_cohorts: 3,
         txns_per_cohort: 2,
+        num_certifiers: 1,
         extent: 6,
         name: name_of(&sim_bank_2x3x2),
     }),
@@ -242,6 +255,7 @@ fn sim_bank_3x3x2() {
         values: &[101, 103, 105],
         num_cohorts: 3,
         txns_per_cohort: 2,
+        num_certifiers: 1,
         extent: 6,
         name: name_of(&sim_bank_3x3x2),
     }),
@@ -254,6 +268,7 @@ fn sim_bank_2x4x1() {
         values: &[101, 103],
         num_cohorts: 4,
         txns_per_cohort: 1,
+        num_certifiers: 1,
         extent: 4,
         name: name_of(&sim_bank_2x4x1),
     }),
@@ -266,6 +281,7 @@ fn sim_bank_2x4x2() {
         values: &[101, 103],
         num_cohorts: 4,
         txns_per_cohort: 2,
+        num_certifiers: 1,
         extent: 8,
         name: name_of(&sim_bank_2x4x2),
     }),
@@ -278,6 +294,7 @@ fn sim_bank_3x4x2() {
         values: &[101, 103, 105],
         num_cohorts: 4,
         txns_per_cohort: 2,
+        num_certifiers: 1,
         extent: 8,
         name: name_of(&sim_bank_3x4x2),
     }),
