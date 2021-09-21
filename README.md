@@ -1,10 +1,7 @@
 `stride-rs`
 ===
-Implementation of the STRIDE certification algorithm in Rust
+Implementation of the [STRIDE](https://doi.org/10.36227/techrxiv.15097140) certification algorithm in Rust.
 
 # Dependencies
-## Development
-* [Install Rust](https://www.rust-lang.org/tools/install).
-
 ## Benchmarking
 * `cargo install cargo-criterion`
