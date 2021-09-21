@@ -1,4 +1,7 @@
 mod fixtures;
+mod harness;
+mod utils;
+
 mod bank_model;
 mod blind_model;
 mod marbles_model;

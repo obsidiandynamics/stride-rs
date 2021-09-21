@@ -1,27 +1,18 @@
-use std::convert::{TryFrom, TryInto};
-use std::env;
 use std::fmt::Debug;
-use std::ops::{Deref, Div};
+use std::ops::Deref;
 use std::rc::Rc;
-use std::str::FromStr;
-use std::time::{Duration, SystemTime};
-
-use rand::RngCore;
-use uuid::Uuid;
 
 use stride::{AbortData, CommitData, DecisionMessageKind, MessageKind};
 use stride::examiner::{Candidate, Examiner, Outcome};
-use stride::havoc::{checker, sim, Sublevel};
-use stride::havoc::checker::{Checker, CheckResult};
-use stride::havoc::model::{ActionResult, Context, Model, rand_element};
+use stride::havoc::model::{ActionResult, Context, rand_element};
 use stride::havoc::model::ActionResult::{Blocked, Breached, Joined, Ran};
-use stride::havoc::sim::{Sim, SimResult};
 use stride::MessageKind::DecisionMessage;
 use stride::suffix::Suffix;
 
-use crate::fixtures::xdb::Xdb;
-use crate::fixtures::xdb::Redaction::{Existing, New};
 use crate::fixtures::broker::{Broker, Stream};
+use crate::fixtures::xdb::Redaction::{Existing, New};
+use crate::fixtures::xdb::Xdb;
+use crate::utils::deuuid;
 
 mod broker;
 mod xdb;
@@ -188,158 +179,6 @@ impl Replica {
             self.ver = ver;
         }
     }
-}
-
-pub fn uuidify<P, R>(pid: P, run: R) -> Uuid
-where
-    P: TryInto<u64>,
-    R: TryInto<u64>,
-    <P as TryInto<u64>>::Error: Debug,
-    <R as TryInto<u64>>::Error: Debug,
-{
-    try_uuidify(pid, run).unwrap()
-}
-
-#[derive(Debug)]
-pub enum Bimorphic<U, V> {
-    A(U),
-    B(V),
-}
-
-pub fn try_uuidify<P, R>(
-    pid: P,
-    run: R,
-) -> Result<Uuid, Bimorphic<<P as TryInto<u64>>::Error, <R as TryInto<u64>>::Error>>
-where
-    P: TryInto<u64>,
-    R: TryInto<u64>,
-{
-    let pid = pid.try_into().map_err(|err| Bimorphic::A(err))? as u128;
-    let run = run.try_into().map_err(|err| Bimorphic::B(err))? as u128;
-    Ok(Uuid::from_u128(pid << 64 | run))
-}
-
-pub fn deuuid<P, R>(uuid: Uuid) -> (P, R)
-where
-    P: TryFrom<u64>,
-    <P as TryFrom<u64>>::Error: Debug,
-    R: TryFrom<u64>,
-    <R as TryFrom<u64>>::Error: Debug,
-{
-    try_deuuid(uuid).unwrap()
-}
-
-pub fn try_deuuid<P, R>(
-    uuid: Uuid,
-) -> Result<(P, R), Bimorphic<<P as TryFrom<u64>>::Error, <R as TryFrom<u64>>::Error>>
-where
-    P: TryFrom<u64>,
-    R: TryFrom<u64>,
-{
-    let val = uuid.as_u128();
-    let pid = <P>::try_from((val >> 64) as u64).map_err(|err| Bimorphic::A(err))?;
-    let run = <R>::try_from(val as u64).map_err(|err| Bimorphic::B(err))?;
-    Ok((pid, run))
-}
-
-pub fn timed<F, R>(f: F) -> (R, Duration)
-where
-    F: Fn() -> R,
-{
-    let start = SystemTime::now();
-    (
-        f(),
-        SystemTime::now()
-            .duration_since(start)
-            .unwrap_or(Duration::new(0, 0)),
-    )
-}
-
-pub fn scale() -> usize {
-    get_env::<usize, _>("SCALE", || 1)
-}
-
-pub fn seed() -> u64 {
-    get_env("SEED", || rand::thread_rng().next_u64())
-}
-
-pub fn get_env<T, D>(key: &str, def: D) -> T
-where
-    T: FromStr,
-    T::Err: std::fmt::Debug,
-    D: Fn() -> T,
-{
-    match env::var(key) {
-        Ok(str) => T::from_str(&str).expect(&format!("invalid {} value '{}'", key, str)),
-        Err(_) => def(),
-    }
-}
-
-fn init_log() {
-    let _ = env_logger::builder().is_test(true).try_init();
-}
-
-pub fn dfs<S>(model: &Model<S>) {
-    init_log();
-    let (result, elapsed) = timed(|| {
-        let config = checker::Config::default().with_sublevel(Sublevel::Fine);
-        log::debug!(
-            "checking model '{}' with {:?}",
-            model.name().unwrap_or("untitled"),
-            config
-        );
-        Checker::new(&model).with_config(config).check()
-    });
-    let stats = result.stats();
-    let per_schedule = elapsed.div(stats.executed as u32);
-    let rate_s = 1_000_000_000 as f64 / per_schedule.as_nanos() as f64;
-    log::debug!(
-        "took {:?} ({:?}/schedule, {:.3} schedules/sec) {:?}",
-        elapsed,
-        per_schedule,
-        rate_s,
-        stats
-    );
-    if let CheckResult::Fail(fail) = &result {
-        log::error!("fail trace:\n{}", fail.trace.prettify(&model));
-    } else if let CheckResult::Deadlock(deadlock) = &result {
-        log::error!("deadlock trace:\n{}", deadlock.trace.prettify(&model));
-    }
-    assert!(matches!(result, CheckResult::Pass(_)), "{:?}", result);
-}
-
-pub fn sim<S>(model: &Model<S>, max_schedules: usize) {
-    init_log();
-    let seed = seed();
-    let max_schedules = max_schedules * scale();
-    let sim = Sim::new(&model)
-        .with_config(
-            sim::Config::default()
-                .with_sublevel(Sublevel::Fine)
-                .with_max_schedules(max_schedules),
-        )
-        .with_seed(seed);
-    log::debug!(
-        "simulating model '{}' with {:?} (seed: {})",
-        model.name().unwrap_or("untitled"),
-        sim.config(),
-        seed
-    );
-    let (result, elapsed) = timed(|| sim.check());
-    let per_schedule = elapsed.div(max_schedules as u32);
-    let rate_s = 1_000_000_000 as f64 / per_schedule.as_nanos() as f64;
-    log::debug!(
-        "took {:?} ({:?}/schedule, {:.3} schedules/sec)",
-        elapsed,
-        per_schedule,
-        rate_s
-    );
-    if let SimResult::Fail(fail) = &result {
-        log::error!("fail trace:\n{}", fail.trace.prettify(&model));
-    } else if let SimResult::Deadlock(deadlock) = &result {
-        log::error!("deadlock trace:\n{}", deadlock.trace.prettify(&model));
-    }
-    assert_eq!(SimResult::Pass, result, "{:?} (seed: {})", result, seed);
 }
 
 pub trait CohortState {

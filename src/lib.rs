@@ -73,6 +73,3 @@ pub struct AbortData {
     pub candidate: Candidate,
     pub reason: AbortReason
 }
-
-#[cfg(test)]
-mod tests;

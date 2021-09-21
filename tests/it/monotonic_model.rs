@@ -7,6 +7,8 @@ use stride::havoc::model::{name_of, Model};
 use stride::*;
 use MessageKind::CandidateMessage;
 use stride::examiner::Record;
+use crate::utils::uuidify;
+use crate::harness::{dfs, sim};
 
 fn asserter(cohort_index: usize) -> impl Fn(&[Cohort]) -> Box<dyn Fn(&[Cohort]) -> Option<String>> {
     move |before| {

@@ -8,6 +8,8 @@ use stride::*;
 use super::fixtures::*;
 use stride::examiner::Record;
 use MessageKind::CandidateMessage;
+use crate::utils::uuidify;
+use crate::harness::{dfs, sim};
 
 fn asserter(
     values: &[i32],

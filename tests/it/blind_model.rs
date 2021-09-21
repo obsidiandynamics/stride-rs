@@ -11,6 +11,8 @@ use stride::havoc::model::Retention::{Strong, Weak};
 use super::fixtures::*;
 use MessageKind::CandidateMessage;
 use stride::examiner::Record;
+use crate::utils::uuidify;
+use crate::harness::{dfs, sim};
 
 fn asserter() -> impl Fn(&[Cohort]) -> Box<dyn Fn(&[Cohort]) -> Option<String>> {
     move |_| {
