@@ -3,7 +3,7 @@ use std::cell::{Cell, RefCell};
 use rustc_hash::FxHashSet;
 
 use crate::havoc::checker::{Checker, Config};
-use crate::havoc::component::*;
+use crate::havoc::components::*;
 use crate::havoc::model::ActionResult::{Blocked, Breached, Joined, Ran};
 use crate::havoc::model::Retention::{Strong, Weak};
 use crate::havoc::model::{name_of, ActionResult, Model};

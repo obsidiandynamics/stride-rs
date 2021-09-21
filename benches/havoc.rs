@@ -1,7 +1,7 @@
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
 
 use stride::havoc::checker::{Checker, CheckResult};
-use stride::havoc::component::Lock;
+use stride::havoc::components::Lock;
 use stride::havoc::model::{Model, name_of};
 use stride::havoc::model::ActionResult::{Blocked, Joined, Ran};
 use stride::havoc::model::Retention::Strong;

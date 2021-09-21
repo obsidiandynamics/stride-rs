@@ -1,6 +1,6 @@
 use crate::havoc::Sublevel::Off;
 
-pub mod component;
+pub mod components;
 pub mod model;
 pub mod checker;
 pub mod sim;

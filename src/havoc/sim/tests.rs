@@ -1,5 +1,5 @@
 use super::*;
-use crate::havoc::component::{Counter, Lock};
+use crate::havoc::components::{Counter, Lock};
 use crate::havoc::model::name_of;
 use crate::havoc::model::ActionResult::{Blocked, Joined, Ran};
 use crate::havoc::model::Retention::Weak;
