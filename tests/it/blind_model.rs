@@ -40,15 +40,14 @@ fn asserter() -> impl Fn(&[Cohort]) -> Box<dyn Fn(&[Cohort]) -> Option<String>> 
 struct BlindCfg<'a> {
     num_cohorts: usize,
     txns_per_cohort: usize,
-    num_certifiers: usize,
-    extent: usize,
+    extents: &'a [usize],
     name: &'a str
 }
 
 fn build_model(cfg: BlindCfg) -> Model<SystemState> {
     let ops = &[Op::Add(2), Op::Mpy(3)];
     let num_cohorts = cfg.num_cohorts;
-    let num_certifiers = cfg.num_certifiers;
+    let num_certifiers = cfg.extents.len();
     let mut model = Model::new(move || SystemState::new(num_cohorts, &[1], num_certifiers))
         .with_name(cfg.name.into());
 
@@ -83,8 +82,12 @@ fn build_model(cfg: BlindCfg) -> Model<SystemState> {
         model.add_action(format!("updater-{}", cohort_index), Weak, updater_action(cohort_index, asserter()));
         model.add_action(format!("replicator-{}", cohort_index), Weak, replicator_action(cohort_index, asserter()));
     }
-    for certifier_index in 0..cfg.num_certifiers {
-        model.add_action(format!("certifier-{}", certifier_index), Weak, certifier_action(certifier_index, cfg.extent));
+    for (certifier_index, &extent) in cfg.extents.iter().enumerate() {
+        model.add_action(
+            format!("certifier-{}", certifier_index),
+            Weak,
+            certifier_action(certifier_index, extent),
+        );
     }
     model.add_action("supervisor".into(), Strong, supervisor_action(cfg.num_cohorts * cfg.txns_per_cohort));
     model
@@ -95,8 +98,7 @@ fn dfs_blind_1x1() {
     dfs(&build_model(BlindCfg {
         num_cohorts: 1,
         txns_per_cohort: 1,
-        num_certifiers: 1,
-        extent: 1,
+        extents: &[1],
         name: name_of(&dfs_blind_1x1)
     }));
 }
@@ -106,8 +108,7 @@ fn dfs_blind_1x2() {
     dfs(&build_model(BlindCfg {
         num_cohorts: 1,
         txns_per_cohort: 2,
-        num_certifiers: 1,
-        extent: 2,
+        extents: &[2],
         name: name_of(&dfs_blind_1x2)
     }));
 }
@@ -118,8 +119,7 @@ fn dfs_blind_2x1() {
     dfs(&build_model(BlindCfg {
         num_cohorts: 2,
         txns_per_cohort: 1,
-        num_certifiers: 1,
-        extent: 2,
+        extents: &[2],
         name: name_of(&dfs_blind_2x1)
     }));
 }
@@ -130,8 +130,7 @@ fn dfs_blind_2x2() {
     dfs(&build_model(BlindCfg {
         num_cohorts: 2,
         txns_per_cohort: 2,
-        num_certifiers: 1,
-        extent: 4,
+        extents: &[4],
         name: name_of(&dfs_blind_2x2)
     }));
 }
@@ -141,8 +140,7 @@ fn sim_blind_1x1() {
     sim(&build_model(BlindCfg {
         num_cohorts: 1,
         txns_per_cohort: 1,
-        num_certifiers: 1,
-        extent: 1,
+        extents: &[1],
         name: name_of(&sim_blind_1x1)
     }), 10);
 }
@@ -152,8 +150,7 @@ fn sim_blind_2x1() {
     sim(&build_model(BlindCfg {
         num_cohorts: 2,
         txns_per_cohort: 1,
-        num_certifiers: 1,
-        extent: 2,
+        extents: &[2],
         name: name_of(&sim_blind_2x1)
     }), 20);
 }
@@ -163,8 +160,7 @@ fn sim_blind_2x2() {
     sim(&build_model(BlindCfg {
         num_cohorts: 2,
         txns_per_cohort: 2,
-        num_certifiers: 1,
-        extent: 4,
+        extents: &[4],
         name: name_of(&sim_blind_2x2)
     }), 40);
 }
@@ -174,8 +170,7 @@ fn sim_blind_3x1() {
     sim(&build_model(BlindCfg {
         num_cohorts: 3,
         txns_per_cohort: 1,
-        num_certifiers: 1,
-        extent: 3,
+        extents: &[3],
         name: name_of(&sim_blind_3x1)
     }), 40);
 }
@@ -185,8 +180,7 @@ fn sim_blind_3x2() {
     sim(&build_model(BlindCfg {
         num_cohorts: 3,
         txns_per_cohort: 2,
-        num_certifiers: 1,
-        extent: 6,
+        extents: &[6],
         name: name_of(&sim_blind_3x2)
     }), 80);
 }
@@ -196,8 +190,7 @@ fn sim_blind_4x1() {
     sim(&build_model(BlindCfg {
         num_cohorts: 4,
         txns_per_cohort: 1,
-        num_certifiers: 1,
-        extent: 4,
+        extents: &[4],
         name: name_of(&sim_blind_4x1)
     }), 80);
 }
@@ -207,8 +200,7 @@ fn sim_blind_4x2() {
     sim(&build_model(BlindCfg {
         num_cohorts: 4,
         txns_per_cohort: 2,
-        num_certifiers: 1,
-        extent: 8,
+        extents: &[8],
         name: name_of(&sim_blind_4x2)
     }), 160);
 }
