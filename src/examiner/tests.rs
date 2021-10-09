@@ -233,7 +233,7 @@ fn paper_example_1() {
     };
     assert!(!examiner.knows(&candidate));
     let outcome = examiner.assess(candidate.clone());
-    assert_eq!(Commit(5, Assertive), outcome);
+    assert_eq!(Commit {safepoint: 5, discord: Assertive}, outcome);
     assert_knows(&examiner, &candidate)
 }
 
@@ -283,7 +283,7 @@ fn paper_example_2() {
     };
     assert!(!examiner.knows(&candidate));
     let outcome = examiner.assess(candidate.clone());
-    assert_eq!(Abort(Staleness, Permissive), outcome);
+    assert_eq!(Abort {reason: Staleness, discord: Permissive}, outcome);
     assert_knows(&examiner, &candidate)
 }
 
@@ -343,7 +343,7 @@ fn paper_example_3() {
     };
     assert!(!examiner.knows(&candidate));
     let outcome = examiner.assess(candidate.clone());
-    assert_eq!(Abort(Antidependency(26), Assertive), outcome);
+    assert_eq!(Abort {reason: Antidependency(26), discord: Assertive}, outcome);
     assert_knows(&examiner, &candidate)
 }
 
@@ -413,7 +413,7 @@ fn paper_example_4() {
     };
     assert!(!examiner.knows(&candidate));
     let outcome = examiner.assess(candidate.clone());
-    assert_eq!(Commit(33, Permissive), outcome);
+    assert_eq!(Commit {safepoint: 33, discord: Permissive}, outcome);
     assert_knows(&examiner, &candidate)
 }
 

@@ -335,14 +335,14 @@ where
 
                         if new_redaction {
                             let decision_message = match outcome {
-                                Outcome::Commit(safepoint, _) => {
+                                Outcome::Commit {safepoint, discord: _} => {
                                     DecisionMessageKind::CommitMessage(CommitData {
                                         candidate,
                                         safepoint,
                                         statemap: candidate_message.statemap.clone(),
                                     })
                                 }
-                                Outcome::Abort(reason, _) => {
+                                Outcome::Abort {reason, discord: _} => {
                                     DecisionMessageKind::AbortMessage(AbortData { candidate, reason })
                                 }
                             };

@@ -1,10 +1,10 @@
-use rustc_hash::FxHashMap;
-use crate::examiner::Discord::{Assertive, Permissive};
-use crate::examiner::Outcome::{Commit, Abort};
-use std::collections::hash_map::Entry;
-use crate::suffix::TruncatedEntry;
-use uuid::Uuid;
 use crate::examiner::AbortReason::{Antidependency, Staleness};
+use crate::examiner::Discord::{Assertive, Permissive};
+use crate::examiner::Outcome::{Abort, Commit};
+use crate::suffix::TruncatedEntry;
+use rustc_hash::FxHashMap;
+use std::collections::hash_map::Entry;
+use uuid::Uuid;
 
 #[derive(Debug)]
 pub struct Examiner {
@@ -21,8 +21,14 @@ pub enum Discord {
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Outcome {
-    Commit(u64, Discord),
-    Abort(AbortReason, Discord),
+    Commit {
+        safepoint: u64,
+        discord: Discord,
+    },
+    Abort {
+        reason: AbortReason,
+        discord: Discord,
+    },
 }
 
 impl Outcome {
@@ -35,8 +41,14 @@ impl Outcome {
 
     pub fn is_commit(&self) -> bool {
         match self {
-            Commit(_, _) => true,
-            Abort(_, _) => false
+            Commit {
+                safepoint: _,
+                discord: _,
+            } => true,
+            Abort {
+                reason: _,
+                discord: _,
+            } => false,
         }
     }
 
@@ -49,15 +61,24 @@ impl Outcome {
 
     pub fn is_abort(&self) -> bool {
         match self {
-            Commit(_, _) => false,
-            Abort(_, _) => true
+            Commit {
+                safepoint: _,
+                discord: _,
+            } => false,
+            Abort {
+                reason: _,
+                discord: _,
+            } => true,
         }
     }
 
     pub fn discord(&self) -> &Discord {
         match self {
-            Commit(_, discord) => discord,
-            Abort(_, discord) => discord
+            Commit {
+                safepoint: _,
+                discord,
+            } => discord,
+            Abort { reason: _, discord } => discord,
         }
     }
 }
@@ -157,18 +178,25 @@ impl Examiner {
         // rule R1: commit write-only transactions
         if candidate.rec.readset.is_empty() {
             // update safepoint for read-write and write-write intersection, and learn the writes
-            let tmp_safepoint = self.update_writes_and_compute_safepoint(candidate.rec.writeset, candidate.ver);
+            let tmp_safepoint =
+                self.update_writes_and_compute_safepoint(candidate.rec.writeset, candidate.ver);
             if tmp_safepoint > safepoint {
                 safepoint = tmp_safepoint;
             }
-            return Commit(safepoint, Assertive);
+            return Commit {
+                safepoint,
+                discord: Assertive,
+            };
         }
 
         // rule R2: conditionally abort transactions outside the suffix
         if candidate.rec.snapshot < self.base - 1 {
             // println!("{} VENTURING snapshot {} base {}", candidate.ver, candidate.rec.snapshot, self.base);
             self.learn(candidate);
-            return Abort(Staleness, Permissive);
+            return Abort {
+                reason: Staleness,
+                discord: Permissive,
+            };
         }
 
         // rule R3: abort on antidependency
@@ -178,7 +206,10 @@ impl Examiner {
                     && !candidate.rec.readvers.contains(&self_write)
                 {
                     self.learn(candidate);
-                    return Abort(Antidependency(self_write), Assertive);
+                    return Abort {
+                        reason: Antidependency(self_write),
+                        discord: Assertive,
+                    };
                 }
 
                 // update safepoint for write-read intersection
@@ -191,7 +222,8 @@ impl Examiner {
         // rule R4 conditionally commit
 
         // update safepoint for read-write and write-write intersection, and learn the writes
-        let tmp_safepoint = self.update_writes_and_compute_safepoint(candidate.rec.writeset, candidate.ver);
+        let tmp_safepoint =
+            self.update_writes_and_compute_safepoint(candidate.rec.writeset, candidate.ver);
         if tmp_safepoint > safepoint {
             safepoint = tmp_safepoint;
         }
@@ -201,12 +233,20 @@ impl Examiner {
             self.reads.insert(candidate_read, candidate.ver);
         }
 
-        Commit(safepoint, Permissive)
+        Commit {
+            safepoint,
+            discord: Permissive,
+        }
     }
 
     pub fn discard(&mut self, entry: TruncatedEntry) {
         assert_ne!(self.base, 0, "uninitialized examiner");
-        assert!(entry.ver >= self.base, "entry.ver ({}) < self.base ({})", entry.ver, self.base);
+        assert!(
+            entry.ver >= self.base,
+            "entry.ver ({}) < self.base ({})",
+            entry.ver,
+            self.base
+        );
         Self::remove_items(&mut self.reads, entry.readset, entry.ver);
         Self::remove_items(&mut self.writes, entry.writeset, entry.ver);
         self.base = entry.ver + 1;
@@ -215,19 +255,27 @@ impl Examiner {
     pub fn base(&self) -> Option<u64> {
         match self.base {
             0 => None,
-            base => Some(base)
+            base => Some(base),
         }
     }
 
-    fn remove_items(existing_items: &mut FxHashMap<String, u64>,  items_to_remove: Vec<String>, ver_to_remove: u64) {
+    fn remove_items(
+        existing_items: &mut FxHashMap<String, u64>,
+        items_to_remove: Vec<String>,
+        ver_to_remove: u64,
+    ) {
         for item_to_remove in items_to_remove {
             match existing_items.entry(item_to_remove) {
                 Entry::Occupied(existing) => {
                     if *existing.get() == ver_to_remove {
                         existing.remove();
                     } else {
-                        assert!(ver_to_remove < *existing.get(),
-                                "skipped version {} while trying to remove {}", *existing.get(), ver_to_remove)
+                        assert!(
+                            ver_to_remove < *existing.get(),
+                            "skipped version {} while trying to remove {}",
+                            *existing.get(),
+                            ver_to_remove
+                        )
                     }
                 }
                 Entry::Vacant(_) => {}

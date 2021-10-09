@@ -51,7 +51,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             |candidate| {
                 let expected_safepoint = candidate.rec.snapshot;
                 let outcome = examiner.assess(candidate);
-                assert_eq!(Commit(expected_safepoint, Discord::Permissive), outcome);
+                assert_eq!(Commit {safepoint: expected_safepoint, discord: Discord::Permissive}, outcome);
             },
             BatchSize::SmallInput,
         )

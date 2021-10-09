@@ -97,7 +97,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
                 let ver = candidate.ver;
                 let outcome = examiner.assess(candidate);
-                assert_eq!(Commit(ver - 1, Permissive), outcome);
+                assert_eq!(Commit {safepoint: ver - 1, discord: Permissive}, outcome);
 
                 assert_eq!(Ok(Decided(ver)), suffix.decide(ver));
 
