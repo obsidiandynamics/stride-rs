@@ -33,5 +33,9 @@ name = "havoc"
 harness = false
 
 [[bench]]
+name = "sortedvec"
+harness = false
+
+[[bench]]
 name = "suffix"
 harness = false
