@@ -13,11 +13,6 @@ impl Cycle {
             let next = self.0 + 1;
             self.0 = if next == self.1 { 0 } else { next };
             self.0
-            // self.0 += 1;
-            // if self.0 == self.1 {
-            //     self.0 = 0;
-            // }
-            // self.0
         }
     }
 }
@@ -31,10 +26,6 @@ fn criterion_benchmark(c: &mut Criterion) {
             let mut item = Cycle(0, num_items);
             b.iter(|| {
                 assert_eq!(expect_contain, sortedvec.contains(black_box(&item.next())));
-                // item += 1;
-                // if item == num_items {
-                //     item = 0;
-                // }
             });
         });
 
@@ -42,10 +33,6 @@ fn criterion_benchmark(c: &mut Criterion) {
             let mut item = Cycle(0, num_items);
             b.iter(|| {
                 assert_eq!(expect_contain, vec.contains(black_box(&item.next())));
-                // item += 1;
-                // if item == num_items {
-                //     item = 0;
-                // }
             });
         });
 
@@ -54,10 +41,6 @@ fn criterion_benchmark(c: &mut Criterion) {
             let mut item = Cycle(0, num_items);
             b.iter(|| {
                 assert_eq!(expect_contain, set.contains(black_box(&item.next())));
-                // item += 1;
-                // if item == num_items {
-                //     item = 0;
-                // }
             });
         });
     }

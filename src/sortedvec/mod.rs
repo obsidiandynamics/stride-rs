@@ -46,14 +46,10 @@ impl<T: Ord> SortedVec<T> {
     }
 
     pub fn contains(&self, element: &T) -> bool {
-        // if self.elements.len() > 4 {
-            match self.elements.binary_search(element) {
-                Ok(_) => true,
-                Err(_) => false
-            }
-        // } else {
-        //     self.elements.contains(element)
-        // }
+        match self.elements.binary_search(element) {
+            Ok(_) => true,
+            Err(_) => false
+        }
     }
 
     pub fn clear(&mut self) {

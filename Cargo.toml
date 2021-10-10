@@ -17,7 +17,7 @@ rand = "0.8"
 rustc-hash = "1.1"
 
 [dev-dependencies]
-criterion = "0.3"
+criterion = { version = "0.3", features = ["html_reports"] }
 #more-asserts = "0.2"
 
 [[bench]]
