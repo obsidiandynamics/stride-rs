@@ -1,6 +1,4 @@
-use crate::suffix::DecideError::NoSuchCandidate;
-use crate::suffix::DecideResult::{Decided, Lapsed, Uninitialized};
-use crate::suffix::InsertError::Nonmonotonic;
+use crate::suffix::AppendSkipReason::Nonmonotonic;
 use std::ops::Range;
 use std::collections::VecDeque;
 
@@ -8,7 +6,7 @@ use std::collections::VecDeque;
 pub struct RetainedEntry {
     pub readset: Vec<String>,
     pub writeset: Vec<String>,
-    pub decided: bool,
+    pub completed: bool,
 }
 
 #[derive(Debug, PartialEq)]
@@ -22,7 +20,7 @@ pub struct TruncatedEntry {
 pub struct Suffix {
     base: u64,
     entries: VecDeque<Option<RetainedEntry>>,
-    highest_decided: u64,
+    highest_completed: u64,
 }
 
 impl Default for Suffix {
@@ -32,19 +30,26 @@ impl Default for Suffix {
 }
 
 #[derive(Debug, PartialEq)]
-pub enum InsertError {
+pub enum AppendResult {
+    Appended,
+    Skipped(AppendSkipReason)
+}
+
+#[derive(Debug, PartialEq)]
+pub enum AppendSkipReason {
     Nonmonotonic,
 }
 
 #[derive(Debug, PartialEq)]
-pub enum DecideResult {
-    Uninitialized,
-    Lapsed(u64),  // the low-water mark
-    Decided(u64), // the highest decided version in the suffix
+pub enum CompleteResult {
+    Completed(u64),  // the highest completed version in the suffix
+    Skipped(CompleteSkipReason)
 }
 
 #[derive(Debug, PartialEq)]
-pub enum DecideError {
+pub enum CompleteSkipReason {
+    Uninitialized,
+    Lapsed(u64),     // the low-water mark
     NoSuchCandidate,
 }
 
@@ -53,7 +58,7 @@ impl Suffix {
         Self {
             base: 0,
             entries: VecDeque::with_capacity(capacity),
-            highest_decided: 0,
+            highest_completed: 0,
         }
     }
 
@@ -78,22 +83,22 @@ impl Suffix {
         }
     }
 
-    pub fn insert(
+    pub fn append(
         &mut self,
         readset: Vec<String>,
         writeset: Vec<String>,
         ver: u64,
-    ) -> Result<(), InsertError> {
+    ) -> AppendResult {
         assert_ne!(0, ver, "unsupported version 0");
         if self.base == 0 {
-            // initialize the base offset and highest decided on the first inserted entry
+            // initialize the base offset and highest completed on the first inserted entry
             self.base = ver;
-            self.highest_decided = ver - 1;
+            self.highest_completed = ver - 1;
         }
 
         let hwm = self.base + self.entries.len() as u64;
         if ver < hwm {
-            return Err(Nonmonotonic);
+            return AppendResult::Skipped(Nonmonotonic);
         }
 
         let pad = (ver - hwm) as usize;
@@ -104,10 +109,10 @@ impl Suffix {
         self.entries.push_back(Some(RetainedEntry {
             readset,
             writeset,
-            decided: false,
+            completed: false,
         }));
 
-        Ok(())
+        AppendResult::Appended
     }
 
     pub fn get(&self, ver: u64) -> Option<&RetainedEntry> {
@@ -126,32 +131,32 @@ impl Suffix {
         };
     }
 
-    pub fn decide(&mut self, ver: u64) -> Result<DecideResult, DecideError> {
+    pub fn complete(&mut self, ver: u64) -> CompleteResult {
         if self.base == 0 {
-            return Ok(Uninitialized);
+            return CompleteResult::Skipped(CompleteSkipReason::Uninitialized);
         }
         if ver < self.base {
-            return Ok(Lapsed(self.base));
+            return CompleteResult::Skipped(CompleteSkipReason::Lapsed(self.base));
         }
 
         let index = (ver - self.base) as usize;
         if index >= self.entries.len() {
-            return Err(NoSuchCandidate);
+            return CompleteResult::Skipped(CompleteSkipReason::NoSuchCandidate);
         }
 
         match &mut self.entries[index] {
-            None => return Err(NoSuchCandidate),
-            Some(item) => item.decided = true,
+            None => return CompleteResult::Skipped(CompleteSkipReason::NoSuchCandidate),
+            Some(item) => item.completed = true,
         }
 
-        if ver == self.highest_decided + 1 {
-            self.highest_decided = ver;
+        if ver == self.highest_completed + 1 {
+            self.highest_completed = ver;
             for i in (index + 1)..self.entries.len() {
                 match &mut self.entries[i] {
-                    None => self.highest_decided += 1,
+                    None => self.highest_completed += 1,
                     Some(item) => {
-                        if item.decided {
-                            self.highest_decided += 1;
+                        if item.completed {
+                            self.highest_completed += 1;
                         } else {
                             break;
                         }
@@ -160,13 +165,13 @@ impl Suffix {
             }
         }
 
-        Ok(Decided(self.highest_decided))
+        CompleteResult::Completed(self.highest_completed)
     }
 
-    pub fn highest_decided(&self) -> Option<u64> {
-        match self.highest_decided {
+    pub fn highest_completed(&self) -> Option<u64> {
+        match self.highest_completed {
             0 => None,
-            highest_decided => Some(highest_decided),
+            highest_completed => Some(highest_completed),
         }
     }
 
@@ -188,7 +193,7 @@ impl Suffix {
             return None;
         }
         let base = self.base;
-        let overhang = (self.highest_decided + 1 - base) as usize;
+        let overhang = (self.highest_completed + 1 - base) as usize;
         let num_to_truncate = std::cmp::min(self.entries.len() - min_extent, overhang);
         let drained = self.entries.drain(..num_to_truncate);
         self.base = base + num_to_truncate as u64;

@@ -1,13 +1,12 @@
 use criterion::{criterion_group, criterion_main, Criterion, black_box};
-use stride::suffix::Suffix;
-use stride::suffix::DecideResult::Decided;
+use stride::suffix::{Suffix, AppendResult, CompleteResult};
 
 fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function("suffix_insert_only", |b| {
         let mut suffix = Suffix::new(1_000);
         let mut ver = 1;
         b.iter(|| {
-            assert_eq!(Ok(()), suffix.insert(black_box(vec![]), black_box(vec![]), black_box(ver)));
+            assert_eq!(AppendResult::Appended, suffix.append(black_box(vec![]), black_box(vec![]), black_box(ver)));
             ver += 1;
             assert_eq!(1..ver, suffix.range());
         });
@@ -18,13 +17,12 @@ fn criterion_benchmark(c: &mut Criterion) {
         let mut suffix = Suffix::new(max_extent);
         let mut ver = 1;
         b.iter(|| {
-            assert_eq!(Ok(()), suffix.insert(black_box(vec![]), black_box(vec![]), black_box(ver)));
-            assert_eq!(Ok(Decided(ver)), suffix.decide(black_box(ver)));
+            assert_eq!(AppendResult::Appended, suffix.append(black_box(vec![]), black_box(vec![]), black_box(ver)));
+            assert_eq!(CompleteResult::Completed(ver), suffix.complete(black_box(ver)));
             suffix.truncate(min_extent, max_extent);
             let range = suffix.range();
             let span = (range.end - range.start) as usize;
             assert!(span > 0 && span <= max_extent, "range {:?}", range);
-            // println!("range {:?}", range);
             ver += 1;
         });
     });

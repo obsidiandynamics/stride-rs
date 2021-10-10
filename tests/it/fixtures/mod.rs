@@ -5,7 +5,7 @@ use std::rc::Rc;
 use stride::examiner::{Candidate, Examiner, Outcome};
 use stride::havoc::model::{ActionResult, Context, rand_element};
 use stride::havoc::model::ActionResult::{Blocked, Breached, Joined, Ran};
-use stride::suffix::Suffix;
+use stride::suffix::{Suffix, AppendResult, CompleteResult};
 
 use crate::fixtures::broker::{Broker, Stream};
 use crate::fixtures::xdb::Redaction::{Existing, New};
@@ -299,13 +299,13 @@ where
                 match message.deref() {
                     MessageKind::CandidateMessage(candidate_message) => {
                         let certifier = &mut s.certifiers()[certifier_index];
-                        let result = certifier.suffix.insert(
+                        let result = certifier.suffix.append(
                             candidate_message.rec.readset.clone(),
                             candidate_message.rec.writeset.clone(),
                             offset as u64,
                         );
-                        if let Err(error) = result {
-                            return Breached(format!("suffix insertion error: {:?}", error));
+                        if let AppendResult::Skipped(reason) = result {
+                            return Breached(format!("suffix append skipped: {:?}", reason));
                         }
 
                         let candidate = Candidate {
@@ -356,9 +356,9 @@ where
                     MessageKind::DecisionMessage(decision) => {
                         log::trace!("decision {:?}", decision.candidate());
                         let certifier = &mut s.certifiers()[certifier_index];
-                        let result = certifier.suffix.decide(decision.candidate().ver);
-                        if let Err(error) = result {
-                            return Breached(format!("suffix decision error: {:?}", error));
+                        let result = certifier.suffix.complete(decision.candidate().ver);
+                        if let CompleteResult::Skipped(reason) = result {
+                            return Breached(format!("suffix complete skipped: {:?}", reason));
                         }
 
                         if {

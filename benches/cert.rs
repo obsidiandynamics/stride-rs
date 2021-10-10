@@ -3,8 +3,7 @@ use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 use stride::examiner::Discord::Permissive;
 use stride::examiner::{Examiner, Record, Candidate};
 use stride::examiner::Outcome::Commit;
-use stride::suffix::DecideResult::Decided;
-use stride::suffix::{Suffix};
+use stride::suffix::{Suffix, AppendResult, CompleteResult};
 use uuid::Uuid;
 
 fn criterion_benchmark(c: &mut Criterion) {
@@ -47,18 +46,18 @@ fn criterion_benchmark(c: &mut Criterion) {
         b.iter_batched(
             || setup_candidate(&mut ver),
             |candidate| {
-                let result = suffix.insert(
+                let result = suffix.append(
                     candidate.rec.readset.clone(),
                     candidate.rec.writeset.clone(),
                     candidate.ver,
                 );
-                assert_eq!(Ok(()), result);
+                assert_eq!(AppendResult::Appended, result);
                 assert_eq!(Some(candidate.ver + 1), suffix.hwm());
 
                 let ver = candidate.ver;
                 examiner.learn(candidate);
 
-                assert_eq!(Ok(Decided(ver)), suffix.decide(ver));
+                assert_eq!(CompleteResult::Completed(ver), suffix.complete(ver));
 
                 if {
                     let truncated = suffix.truncate(min_extent, max_extent);
@@ -87,19 +86,19 @@ fn criterion_benchmark(c: &mut Criterion) {
         b.iter_batched(
             || setup_candidate(&mut ver),
             |candidate| {
-                let result = suffix.insert(
+                let result = suffix.append(
                     candidate.rec.readset.clone(),
                     candidate.rec.writeset.clone(),
                     candidate.ver,
                 );
-                assert_eq!(Ok(()), result);
+                assert_eq!(AppendResult::Appended, result);
                 assert_eq!(Some(candidate.ver + 1), suffix.hwm());
 
                 let ver = candidate.ver;
                 let outcome = examiner.assess(candidate);
                 assert_eq!(Commit {safepoint: ver - 1, discord: Permissive}, outcome);
 
-                assert_eq!(Ok(Decided(ver)), suffix.decide(ver));
+                assert_eq!(CompleteResult::Completed(ver), suffix.complete(ver));
 
                 if {
                     let truncated = suffix.truncate(min_extent, max_extent);
