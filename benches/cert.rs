@@ -5,6 +5,7 @@ use stride::examiner::{Examiner, Record, Candidate};
 use stride::examiner::Outcome::Commit;
 use stride::suffix::{Suffix, AppendResult, CompleteResult};
 use uuid::Uuid;
+use stride::sortedvec::SortedVec;
 
 fn criterion_benchmark(c: &mut Criterion) {
     let (min_extent, max_extent) = (10_000, 20_000);
@@ -30,7 +31,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                 xid: Uuid::from_u128(*ver as u128),
                 readset: readset.clone(),
                 writeset: writeset.clone(),
-                readvers: vec![],
+                readvers: SortedVec::default(),
                 snapshot: *ver - 1,
             },
             ver: *ver,

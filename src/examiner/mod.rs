@@ -5,6 +5,7 @@ use crate::suffix::TruncatedEntry;
 use rustc_hash::FxHashMap;
 use std::collections::hash_map::Entry;
 use uuid::Uuid;
+use crate::sortedvec::SortedVec;
 
 #[derive(Debug)]
 pub struct Examiner {
@@ -94,18 +95,24 @@ pub struct Record {
     pub xid: Uuid,
     pub readset: Vec<String>,
     pub writeset: Vec<String>,
-    pub readvers: Vec<u64>,
+    pub readvers: SortedVec<u64>,
     pub snapshot: u64,
 }
 
 impl Record {
-    pub fn compress(cpt_readvers: Vec<u64>, cpt_snapshot: u64) -> (Vec<u64>, u64) {
+    pub fn compress(cpt_readvers: Vec<u64>, cpt_snapshot: u64) -> (SortedVec<u64>, u64) {
         if cpt_readvers.is_empty() {
-            (cpt_readvers, cpt_snapshot)
+            (SortedVec::default(), cpt_snapshot)
         } else {
             let smallest_readver = *cpt_readvers.iter().min().unwrap();
             let snapshot = std::cmp::max(cpt_snapshot, smallest_readver);
-            let readvers = cpt_readvers.into_iter().filter(|&v| v > snapshot).collect();
+
+            let mut readvers = SortedVec::new(cpt_readvers.len() - 1);
+            for &item in &cpt_readvers {
+                if item > snapshot {
+                    readvers.insert(item);
+                }
+            }
             (readvers, snapshot)
         }
     }

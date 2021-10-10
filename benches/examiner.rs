@@ -3,6 +3,7 @@ use uuid::Uuid;
 
 use stride::examiner::Outcome::Commit;
 use stride::examiner::{Discord, Examiner, Record, Candidate};
+use stride::sortedvec::SortedVec;
 
 fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function("examiner_learn", |b| {
@@ -15,7 +16,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                         xid: Uuid::nil(),
                         readset: vec!["x".into()],
                         writeset: vec!["y".into()],
-                        readvers: vec![],
+                        readvers: SortedVec::default(),
                         snapshot: ver - 1,
                     },
                     ver,
@@ -40,7 +41,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                         xid: Uuid::nil(),
                         readset: vec!["x".into()],
                         writeset: vec!["y".into()],
-                        readvers: vec![],
+                        readvers: SortedVec::default(),
                         snapshot: ver - 1,
                     },
                     ver,
