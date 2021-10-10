@@ -2,7 +2,7 @@ use criterion::{criterion_group, criterion_main, Criterion, black_box};
 use stride::suffix::{Suffix, AppendResult, CompleteResult};
 
 fn criterion_benchmark(c: &mut Criterion) {
-    c.bench_function("suffix_insert_only", |b| {
+    c.bench_function("suffix_append_only", |b| {
         let mut suffix = Suffix::new(1_000);
         let mut ver = 1;
         b.iter(|| {
@@ -12,7 +12,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         });
     });
 
-    c.bench_function("suffix_insert_complete", |b| {
+    c.bench_function("suffix_append_complete", |b| {
         let (min_extent, max_extent) = (10_000, 20_000);
         let mut suffix = Suffix::new(max_extent);
         let mut ver = 1;
