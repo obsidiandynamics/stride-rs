@@ -19,8 +19,8 @@ impl Cycle {
 
 fn criterion_benchmark(c: &mut Criterion) {
     for &num_items in &[0, 1, 2, 4, 8, 16, 64, 256] {
-        let vec = (0..num_items).collect::<Vec<u64>>();
-        let expect_contain = if num_items == 0 { false } else { true };
+        let vec = (0..num_items).collect::<Vec<_>>();
+        let expect_contain = num_items != 0;
         c.bench_function(&format!("sortedvec_contains_{}", num_items), |b| {
             let sortedvec: SortedVec<_> = vec.clone().into();
             let mut item = Cycle(0, num_items);
@@ -37,10 +37,10 @@ fn criterion_benchmark(c: &mut Criterion) {
         });
 
         c.bench_function(&format!("hashset_contains_{}", num_items), |b| {
-            let set = FxHashSet::from_iter(vec.clone());
+            let hashset = FxHashSet::from_iter(vec.clone());
             let mut item = Cycle(0, num_items);
             b.iter(|| {
-                assert_eq!(expect_contain, set.contains(black_box(&item.next())));
+                assert_eq!(expect_contain, hashset.contains(black_box(&item.next())));
             });
         });
     }
