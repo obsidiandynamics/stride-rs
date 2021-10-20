@@ -1,7 +1,7 @@
 x86_64 VM
 Linux CentOS 7 kernel 3.10.0-1160.31.1
-Virtual CPU a7769a6388d5 @ 1.9 GHz on KVM
-8 GB (unknown speed) DDR3
+4x vCPU @ 1.9 GHz
+8 GB vRAM
 
 cert_learn              time:   [420.48 ns 422.99 ns 425.09 ns]
 cert_assess             time:   [464.95 ns 467.67 ns 469.92 ns]
