@@ -3,7 +3,7 @@ ChromeOS 93.0.4577.95
 i5-5300U
 8 GB 1600 MHz DDR3
 Linux Penguin kernel 5.4.131-16037-gc5c4846a036d
-2x vCPU @ 2.3 GHz
+2x vCPU @ 2.3 GHz (Broadwell)
 6.75 GB vRAM
 
 cert_learn              time:   [367.62 ns 371.76 ns 376.28 ns]

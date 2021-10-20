@@ -1,6 +1,6 @@
 x86_64 VM
 Linux CentOS 7 kernel 3.10.0-1160.31.1
-4x vCPU @ 1.9 GHz
+4x vCPU @ 1.9 GHz (Broadwell)
 8 GB vRAM
 
 cert_learn              time:   [420.48 ns 422.99 ns 425.09 ns]
