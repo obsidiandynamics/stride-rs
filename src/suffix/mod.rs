@@ -1,6 +1,5 @@
 use crate::suffix::AppendSkipReason::Nonmonotonic;
 use std::ops::Range;
-use std::collections::VecDeque;
 
 #[derive(Debug, PartialEq)]
 pub struct RetainedEntry {
@@ -19,7 +18,7 @@ pub struct TruncatedEntry {
 #[derive(Debug)]
 pub struct Suffix {
     base: u64,
-    entries: VecDeque<Option<RetainedEntry>>,
+    entries: Vec<Option<RetainedEntry>>,
     highest_completed: u64,
 }
 
@@ -57,7 +56,7 @@ impl Suffix {
     pub fn new(capacity: usize) -> Self {
         Self {
             base: 0,
-            entries: VecDeque::with_capacity(capacity),
+            entries: Vec::with_capacity(capacity),
             highest_completed: 0,
         }
     }
@@ -104,9 +103,9 @@ impl Suffix {
         let pad = (ver - hwm) as usize;
         self.entries.reserve(pad + 1);
         for _ in (0..pad).into_iter() {
-            self.entries.push_back(None)
+            self.entries.push(None)
         }
-        self.entries.push_back(Some(RetainedEntry {
+        self.entries.push(Some(RetainedEntry {
             readset,
             writeset,
             completed: false,
